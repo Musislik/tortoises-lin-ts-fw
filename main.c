@@ -60,35 +60,35 @@ void printTemp()
         uint32_t temp = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
         char buffer[10];
         int idx = 0;
-        
+
         do {
-            buffer[idx++] = (temp % 10) + '0'; 
+            buffer[idx++] = (temp % 10) + '0';
             temp /= 10;
         } while (temp > 0);
-        
+
         while (idx > 0) {
             DL_UART_Extend_transmitDataBlocking(LIN_INST, buffer[--idx]);
         }
 }
 
-int32_t calcTempx10(uint32_t adc_raw) 
+int32_t calcTempx10(uint32_t adc_raw)
 {
-    int32_t voltage_mV = ((int32_t)adc_raw * 3300) / 4095;    
+    int32_t voltage_mV = ((int32_t)adc_raw * 3300) / 4095;
     int16_t temp_C_x10 = (int16_t)(voltage_mV - 500);       // 5.6 degC = 56
 
     temp_C_x10 = temp_C_x10 - tempCal;
-    
+
     return temp_C_x10;
 }
 
-uint8_t calcChecksum(uint8_t pid, const uint8_t *buffer, uint8_t length) 
+uint8_t calcChecksum(uint8_t pid, const uint8_t *buffer, uint8_t length)
 {
     uint16_t sum = pid;
-    
-    for (uint8_t i = 0; i < length; i++) 
+
+    for (uint8_t i = 0; i < length; i++)
     {
         sum += buffer[i];
-        if (sum >= 256) 
+        if (sum >= 256)
         {
             sum -= 255;
         }
@@ -101,17 +101,17 @@ void LIN_RX_Handler(uint8_t rxByte)
     uint8_t linPid;
     switch (linRxState) {
         case LIN_RX_STATE_AWAITING:
-        {            
+        {
             // Sync byte expected
             rxBufferLen = 0;
-            
-            if (rxByte == LIN_SYNC_BYTE) 
+
+            if (rxByte == LIN_SYNC_BYTE)
                 linRxState = LIN_RX_STATE_PID;
             else
                 linRxState = LIN_RX_STATE_IDLE;
             break;
         }
-        case LIN_RX_STATE_PID:        
+        case LIN_RX_STATE_PID:
         {
             linPid = rxByte;
 
@@ -125,38 +125,38 @@ void LIN_RX_Handler(uint8_t rxByte)
                 int32_t temp = calcTempx10(adcTempVal);
 
                 txBuffer[0] = (uint8_t)((temp >> 8) & 0xFF);
-                txBuffer[1] = (uint8_t)((temp) & 0xFF); 
+                txBuffer[1] = (uint8_t)((temp) & 0xFF);
                 txBuffer[2] = calcChecksum(LIN_SEND_TEMP_PID, txBuffer, 2);
-                
+
                 DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                 txBufferIx = 1;
-                
+
                 DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
-                break; 
+                break;
             }
             rxBufferLen = 0;
             break;
-                   
+
         }
         default:
-        {            
+        {
             break;
-        }            
+        }
     }
 }
 
 int main(void)
 {
     //DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX);
-    SYSCFG_DL_init();   
+    SYSCFG_DL_init();
 
     //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
-    
-    delay_cycles(240000000);    // 10s delay for SWD 
+
+    delay_cycles(240000000);    // 10s delay for SWD
 
     //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
     delay_cycles(240000);
-    
+
     DL_GPIO_initDigitalOutput(IOMUX_PINCM20);       // Init GPIO - LIN enable pin
     DL_GPIO_clearPins(GPIOA, DL_GPIO_PIN_19);
     DL_GPIO_enableOutput(GPIOA, DL_GPIO_PIN_19);    //
@@ -169,7 +169,7 @@ int main(void)
 
     adcInit();     // Init DMA so it transfers ADC result to temp_raw variable
 
-    
+
     // Interrupt settings
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX);
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_FRAMING_ERROR);
@@ -211,7 +211,7 @@ void LIN_INST_IRQHandler(void)
     /// Break detection
     uint32_t pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH | DL_UART_INTERRUPT_RX);
 
-    if ((pendingFlags & DL_UART_INTERRUPT_LINC0_MATCH) == DL_UART_INTERRUPT_LINC0_MATCH) 
+    if ((pendingFlags & DL_UART_INTERRUPT_LINC0_MATCH) == DL_UART_INTERRUPT_LINC0_MATCH)
     {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
 
@@ -222,28 +222,28 @@ void LIN_INST_IRQHandler(void)
     pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW);
 
     /// Lin counter overflow
-    if ((pendingFlags & DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) == DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) 
+    if ((pendingFlags & DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) == DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW)
     {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW);
-        
-        return;      
+
+        return;
     }
-    
-    
-    switch (DL_UART_Extend_getPendingInterrupt(LIN_INST)) 
+
+
+    switch (DL_UART_Extend_getPendingInterrupt(LIN_INST))
     {
-        
-        case DL_UART_EXTEND_IIDX_RX:    // Data received 
+
+        case DL_UART_EXTEND_IIDX_RX:    // Data received
         {
             rxByte = DL_UART_Extend_receiveData(LIN_INST);
 
-            if (LinDataExpected() && ((rxBufferLen + 1) < LIN_RX_BUFFER_LEN)) 
+            if (LinDataExpected() && ((rxBufferLen + 1) < LIN_RX_BUFFER_LEN))
             {
                 rxBuffer[rxBufferLen] = rxByte;
                 rxBufferLen++;
                 flagCallRxHandler = true;
             }
-            else 
+            else
             {
                 DL_UART_Extend_receiveData(LIN_INST);
                 break;
@@ -294,7 +294,7 @@ void LIN_INST_IRQHandler(void)
             NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
             break;
         }
-    }    
+    }
             /*if (current_pid == 8) // Calibration
             {
                 temp_raw = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
@@ -303,5 +303,5 @@ void LIN_INST_IRQHandler(void)
                 tempCal = tempCal + temp;
                 flagSaveTempCal = true;
             }*/
-    
+
 }

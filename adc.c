@@ -1,0 +1,35 @@
+#include "adc.h"
+
+static const DL_ADC12_ClockConfig gADC12_0ClockConfig = {
+    .clockSel       = DL_ADC12_CLOCK_SYSOSC,
+    .divideRatio    = DL_ADC12_CLOCK_DIVIDE_1,
+    .freqRange      = DL_ADC12_CLOCK_FREQ_RANGE_20_TO_24,
+};
+
+void adcInit()
+{
+    DL_ADC12_reset(ADC12_0_INST);
+    DL_ADC12_enablePower(ADC12_0_INST);
+
+    delay_cycles(1000);
+
+    // PIN MUX
+    DL_GPIO_initPeripheralAnalogFunction(IOMUX_PINCM21);
+
+    // ADC
+    DL_ADC12_setClockConfig(ADC12_0_INST, (DL_ADC12_ClockConfig *) &gADC12_0ClockConfig);
+    DL_ADC12_initSingleSample(ADC12_0_INST,
+        DL_ADC12_REPEAT_MODE_ENABLED, DL_ADC12_SAMPLING_SOURCE_AUTO, DL_ADC12_TRIG_SRC_SOFTWARE,
+        DL_ADC12_SAMP_CONV_RES_12_BIT, DL_ADC12_SAMP_CONV_DATA_FORMAT_UNSIGNED);
+    DL_ADC12_configConversionMem(ADC12_0_INST, ADC12_0_ADCMEM_0,
+        DL_ADC12_INPUT_CHAN_6, DL_ADC12_REFERENCE_VOLTAGE_VDDA, DL_ADC12_SAMPLE_TIMER_SOURCE_SCOMP0, DL_ADC12_AVERAGING_MODE_ENABLED,
+        DL_ADC12_BURN_OUT_SOURCE_DISABLED, DL_ADC12_TRIGGER_MODE_AUTO_NEXT, DL_ADC12_WINDOWS_COMP_MODE_DISABLED);
+    DL_ADC12_configHwAverage(ADC12_0_INST, DL_ADC12_HW_AVG_NUM_ACC_32, DL_ADC12_HW_AVG_DEN_DIV_BY_32);
+    DL_ADC12_setSampleTime0(ADC12_0_INST,512);
+    
+    // Enable ADC12 interrupt
+    DL_ADC12_enableConversions(ADC12_0_INST);
+
+    // start conversion
+    DL_ADC12_startConversion(ADC12_0_INST);
+}

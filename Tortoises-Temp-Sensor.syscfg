@@ -1,0 +1,59 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "MSPM0C110X" --part "Default" --package "SOT-8(DDF)" --product "mspm0_sdk@2.10.00.04"
+ * @v2CliArgs --device "MSPM0C1103" --package "SOT-8(DDF)" --product "mspm0_sdk@2.10.00.04"
+ * @versions {"tool":"1.26.2+4477"}
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const GPIO     = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1    = GPIO.addInstance();
+const SYSCTL   = scripting.addModule("/ti/driverlib/SYSCTL");
+const uartLIN  = scripting.addModule("/ti/driverlib/uartLIN", {}, false);
+const uartLIN1 = uartLIN.addInstance();
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+GPIO1.$name                         = "GPIO";
+GPIO1.associatedPins[0].$name       = "DBG";
+GPIO1.associatedPins[0].pin.$assign = "PA0";
+
+const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
+
+
+uartLIN1.targetBaudRate                   = 19200;
+uartLIN1.enableLinCounter                 = true;
+uartLIN1.enableLinCounterClearFallingEdge = true;
+uartLIN1.enableLinCountWhileLow           = true;
+uartLIN1.enableLinCounterCompare          = true;
+uartLIN1.tbitVal                          = 11;
+uartLIN1.$name                            = "LIN";
+uartLIN1.txPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric0";
+uartLIN1.txPinConfig.direction            = scripting.forceWrite("OUTPUT");
+uartLIN1.txPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+uartLIN1.txPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+uartLIN1.txPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+uartLIN1.rxPinConfig.$name                = "ti_driverlib_gpio_GPIOPinGeneric1";
+uartLIN1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
+uartLIN1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
+uartLIN1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
+
+const ProjectConfig              = scripting.addModule("/ti/project_config/ProjectConfig", {}, false);
+ProjectConfig.migrationCondition = true;
+
+/**
+ * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
+ * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
+ * re-solve from scratch.
+ */
+Board.peripheral.$suggestSolution          = "DEBUGSS";
+Board.peripheral.swclkPin.$suggestSolution = "PA20";
+Board.peripheral.swdioPin.$suggestSolution = "PA19";
+SYSCTL.peripheral.$suggestSolution         = "SYSCTL";
+uartLIN1.peripheral.$suggestSolution       = "UART0";
+uartLIN1.peripheral.rxPin.$suggestSolution = "PA24";
+uartLIN1.peripheral.txPin.$suggestSolution = "PA27";

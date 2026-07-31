@@ -22,7 +22,7 @@
 
 
 // Device PIDs
-#define LIN_SEND_TEMP_PID 0x10
+#define LIN_SEND_TEMP_PID 0x0A // 10 decimal, misto puvodniho 0x10 (16)
 
 #define LinDataExpected() ((linRxState == LIN_RX_STATE_AWAITING) || (linRxState == LIN_RX_STATE_PID))
 

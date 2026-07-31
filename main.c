@@ -130,6 +130,7 @@ void LIN_RX_Handler(uint8_t rxByte)
 
                 DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                 txBufferIx = 1;
+                txBufferLen = 3;
 
                 DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
                 break;

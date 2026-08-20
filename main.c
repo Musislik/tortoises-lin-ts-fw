@@ -38,14 +38,6 @@
 volatile int16_t tempCal = 0;
 volatile bool flagSaveTempCal = false;
 
-// Variables for LIN RX Ring Buffer
-#define RX_BUFFER_MASK (LIN_RX_BUFFER_LEN - 1)
-uint8_t rxBuffer[LIN_RX_BUFFER_LEN] = {0};
-volatile uint32_t rxHead = 0;
-volatile uint32_t rxTail = 0;
-
-volatile linRxState_t linRxState = LIN_RX_STATE_INIT;
-
 // Variables for LIN TX
 uint8_t txBuffer[LIN_TX_BUFFER_LEN] = {0};
 volatile uint32_t txBufferIx = 0;
@@ -77,47 +69,6 @@ uint8_t calcChecksum(uint8_t pid, const uint8_t *buffer, uint8_t length)
         }
     }
     return (uint8_t)(~sum);
-}
-
-void processLinRxByte(uint8_t rxByte)
-{
-    switch (linRxState) {
-        case LIN_RX_STATE_AWAITING:
-            if (rxByte == LIN_SYNC_BYTE) {
-                linRxState = LIN_RX_STATE_PID;
-            } else {
-                linRxState = LIN_RX_STATE_IDLE;
-            }
-            break;
-
-        case LIN_RX_STATE_PID:
-            if (rxByte == LIN_SEND_TEMP_PID)
-            {
-                linRxState = LIN_RX_STATE_IDLE;
-
-                uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
-                int32_t temp = calcTempx10(adcTempVal);
-
-                txBuffer[0] = (uint8_t)((temp >> 8) & 0xFF);
-                txBuffer[1] = (uint8_t)(temp & 0xFF);
-                txBuffer[2] = calcChecksum(LIN_SEND_TEMP_PID, txBuffer, 2);
-
-                txBufferIx = 1;
-                txBufferLen = 3;
-
-                // Start transmission
-                DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
-                DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
-            }
-            else
-            {
-                linRxState = LIN_RX_STATE_IDLE;
-            }
-            break;
-
-        default:
-            break;
-    }
 }
 
 void initHardware(void)
@@ -163,21 +114,16 @@ int main(void)
             saveTempCal(tempCal);
         }
 
-        // Process LIN RX ring buffer
-        while (rxTail != rxHead) {
-            uint8_t byte = rxBuffer[rxTail++];
-            rxTail &= RX_BUFFER_MASK;
-            processLinRxByte(byte);
-        }
-
-        // Sleep safely (prevent race condition between check and sleep)
+        // Sleep safely (wake up on any interrupt)
         __disable_irq();
-        if (rxTail == rxHead && !flagSaveTempCal) {
+        if (!flagSaveTempCal) {
             __WFI();
         }
         __enable_irq();
     }
 }
+
+volatile linRxState_t linRxState = LIN_RX_STATE_INIT;
 
 void LIN_INST_IRQHandler(void)
 {
@@ -188,8 +134,6 @@ void LIN_INST_IRQHandler(void)
     {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
         linRxState = LIN_RX_STATE_AWAITING;
-        // Reset RX buffer on new frame start
-        rxHead = rxTail = 0;
         return;
     }
 
@@ -208,10 +152,42 @@ void LIN_INST_IRQHandler(void)
         {
             uint8_t rxByte = DL_UART_Extend_receiveData(LIN_INST);
 
-            if (LinDataExpected())
-            {
-                rxBuffer[rxHead++] = rxByte;
-                rxHead &= RX_BUFFER_MASK;
+            switch (linRxState) {
+                case LIN_RX_STATE_AWAITING:
+                    if (rxByte == LIN_SYNC_BYTE) {
+                        linRxState = LIN_RX_STATE_PID;
+                    } else {
+                        linRxState = LIN_RX_STATE_IDLE;
+                    }
+                    break;
+
+                case LIN_RX_STATE_PID:
+                    if (rxByte == LIN_SEND_TEMP_PID)
+                    {
+                        linRxState = LIN_RX_STATE_IDLE;
+
+                        uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
+                        int32_t temp = calcTempx10(adcTempVal);
+
+                        txBuffer[0] = (uint8_t)((temp >> 8) & 0xFF);
+                        txBuffer[1] = (uint8_t)(temp & 0xFF);
+                        txBuffer[2] = calcChecksum(LIN_SEND_TEMP_PID, txBuffer, 2);
+
+                        txBufferIx = 1;
+                        txBufferLen = 3;
+
+                        // Start transmission
+                        DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
+                        DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
+                    }
+                    else
+                    {
+                        linRxState = LIN_RX_STATE_IDLE;
+                    }
+                    break;
+
+                default:
+                    break;
             }
             break;
         }

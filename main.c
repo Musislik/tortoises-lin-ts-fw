@@ -58,8 +58,8 @@ extern void adcInit(void);
 
 int32_t calcTempx10(uint32_t adc_raw)
 {
-    int32_t voltage_mV = ((int32_t)adc_raw * 3300) / 4095;
-    int16_t temp_C_x10 = (int16_t)(voltage_mV - 500); // 5.6 degC = 56
+    int32_t voltage_mV = ((int32_t)adc_raw * ADC_VREF_MV) / ADC_MAX_VAL;
+    int16_t temp_C_x10 = (int16_t)(voltage_mV - TEMP_OFFSET_MV); // 5.6 degC = 56
     
     return temp_C_x10 - tempCal;
 }
@@ -134,8 +134,8 @@ void initHardware(void)
 
     delay_cycles(240000);
 
-    adcInit(); // Init DMA so it transfers ADC result to temp_raw variable
-
+    adcInit(); // Init ADC so it transfers result to memory
+    
     // LIN UART Interrupt settings
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX);
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_FRAMING_ERROR);
@@ -169,6 +169,13 @@ int main(void)
             rxTail &= RX_BUFFER_MASK;
             processLinRxByte(byte);
         }
+
+        // Sleep safely (prevent race condition between check and sleep)
+        __disable_irq();
+        if (rxTail == rxHead && !flagSaveTempCal) {
+            __WFI();
+        }
+        __enable_irq();
     }
 }
 

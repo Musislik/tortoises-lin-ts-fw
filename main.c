@@ -137,6 +137,10 @@ void LIN_INST_IRQHandler(void)
     {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
         linRxState = LIN_RX_STATE_AWAITING;
+        
+        // Start ADC conversion on break, so data is ready by the time PID arrives
+        DL_ADC12_startConversion(ADC12_0_INST);
+        
         return;
     }
 

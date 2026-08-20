@@ -43,9 +43,34 @@ uint8_t txBuffer[LIN_TX_BUFFER_LEN] = {0};
 volatile uint32_t txBufferIx = 0;
 volatile uint32_t txBufferLen = 0;
 
-// External functions
-extern int16_t loadTempCal(void);
-extern void saveTempCal(int16_t);
+// Calibration Flash Configuration
+#define FLASH_CAL_ADDR (0x00001C00)
+#define CALIBRATION_MAGIC 0x26260000
+
+typedef struct {
+    uint32_t magic;
+    int32_t tempCal;
+} CalibrationData;
+
+int16_t loadTempCal(void) {
+    CalibrationData* cal = (CalibrationData*)FLASH_CAL_ADDR;
+    if (cal->magic == CALIBRATION_MAGIC) {
+        return (int16_t)cal->tempCal;
+    }
+    return 0;
+}
+
+void saveTempCal(int16_t value) {
+    DL_FlashCTL_unprotectSector(FLASHCTL, FLASH_CAL_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
+    DL_FlashCTL_eraseMemoryFromRAM(FLASHCTL, FLASH_CAL_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);
+    
+    uint32_t data[2];
+    data[0] = CALIBRATION_MAGIC;
+    data[1] = (int32_t)value;
+    
+    DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, FLASH_CAL_ADDR, data);
+}
+
 extern void adcInit(void);
 
 int32_t calcTempx10(uint32_t adc_raw)

@@ -20,7 +20,7 @@
 
 // Device PIDs
 #define LIN_SEND_TEMP_PID 0x0A
-
+#define LIN_CALIBRATE_PID 0x08
 // Macros
 #define LinDataExpected() ((linRxState == LIN_RX_STATE_AWAITING) || (linRxState == LIN_RX_STATE_PID))
 

@@ -87,6 +87,9 @@ void initHardware(void)
 
     adcInit(); // Init ADC so it transfers result to memory
     
+    // Load calibration from flash
+    tempCal = loadTempCal();
+    
     // LIN UART Interrupt settings
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX);
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_FRAMING_ERROR);
@@ -179,6 +182,18 @@ void LIN_INST_IRQHandler(void)
                         // Start transmission
                         DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                         DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
+                    }
+                    else if (rxByte == LIN_CALIBRATE_PID)
+                    {
+                        linRxState = LIN_RX_STATE_IDLE;
+
+                        uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
+                        int32_t temp = calcTempx10(adcTempVal);
+
+                        // Assuming calibration is done at exactly 0°C.
+                        // calcTempx10 computes the error (measured vs 0), we add it to the offset.
+                        tempCal += temp;
+                        flagSaveTempCal = true;
                     }
                     else
                     {

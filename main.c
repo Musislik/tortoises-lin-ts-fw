@@ -36,7 +36,6 @@
 
 // Variables for Calibration
 volatile int16_t tempCal = 0;
-volatile bool flagSaveTempCal = false;
 
 // Variables for LIN TX
 uint8_t txBuffer[LIN_TX_BUFFER_LEN] = {0};
@@ -60,15 +59,20 @@ int16_t loadTempCal(void) {
     return 0;
 }
 
-void saveTempCal(int16_t value) {
+DL_FLASHCTL_COMMAND_STATUS saveTempCal(int16_t value) {
+    DL_FlashCTL_clearCommandStatus(FLASHCTL);
     DL_FlashCTL_unprotectSector(FLASHCTL, FLASH_CAL_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
-    DL_FlashCTL_eraseMemoryFromRAM(FLASHCTL, FLASH_CAL_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);
     
-    uint32_t data[2];
-    data[0] = CALIBRATION_MAGIC;
-    data[1] = (int32_t)value;
+    DL_FLASHCTL_COMMAND_STATUS status = DL_FlashCTL_eraseMemoryFromRAM(FLASHCTL, FLASH_CAL_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);
     
-    DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, FLASH_CAL_ADDR, data);
+    if (status == DL_FLASHCTL_COMMAND_STATUS_PASSED) {
+        uint32_t data[2];
+        data[0] = CALIBRATION_MAGIC;
+        data[1] = (int32_t)value;
+        status = DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, FLASH_CAL_ADDR, data);
+    }
+    
+    return status;
 }
 
 extern void adcInit(void);
@@ -137,17 +141,8 @@ int main(void)
     initHardware();
 
     while (1) {
-        if (flagSaveTempCal) {
-            flagSaveTempCal = false;
-            saveTempCal(tempCal);
-        }
-
         // Sleep safely (wake up on any interrupt)
-        __disable_irq();
-        if (!flagSaveTempCal) {
-            __WFI();
-        }
-        __enable_irq();
+        __WFI();
     }
 }
 
@@ -222,7 +217,21 @@ void LIN_INST_IRQHandler(void)
                         // Assuming calibration is done at exactly 0°C.
                         // calcTempx10 computes the error (measured vs 0), we add it to the offset.
                         tempCal += temp;
-                        flagSaveTempCal = true;
+                        
+                        DL_FLASHCTL_COMMAND_STATUS status = saveTempCal(tempCal);
+                        int16_t savedCal = loadTempCal();
+
+                        txBuffer[0] = (uint8_t)((savedCal >> 8) & 0xFF);
+                        txBuffer[1] = (uint8_t)(savedCal & 0xFF);
+                        txBuffer[2] = (uint8_t)status;
+                        txBuffer[3] = calcChecksum(LIN_CALIBRATE_PID, txBuffer, 3);
+
+                        txBufferIx = 1;
+                        txBufferLen = 4;
+
+                        // Start transmission
+                        DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
+                        DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
                     }
                     else
                     {

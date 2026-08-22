@@ -3,4 +3,7 @@
 
 #include "defs.h"
 
+void adcInit(void);
+void adcReconfigure(uint8_t hwConfig);
+
 #endif

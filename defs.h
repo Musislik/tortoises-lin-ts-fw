@@ -18,9 +18,6 @@
 #define LIN_TX_BUFFER_LEN 32
 #define LIN_SYNC_BYTE (0x55)
 
-// Device PIDs
-#define LIN_SEND_TEMP_PID 0x0A
-#define LIN_CALIBRATE_PID 0x08
 // Macros
 #define LinDataExpected() ((linRxState == LIN_RX_STATE_AWAITING) || (linRxState == LIN_RX_STATE_PID))
 
@@ -39,7 +36,8 @@ typedef enum {
     LIN_RX_STATE_IDLE = 1,
     LIN_RX_STATE_AWAITING = 2,
     LIN_RX_STATE_PID = 3,
-    LIN_RX_STATE_FAULT = 4
+    LIN_RX_STATE_RX_DATA = 4,
+    LIN_RX_STATE_FAULT = 5
 } linRxState_t;
 
 #endif // DEFS_H

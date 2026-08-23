@@ -27,8 +27,8 @@ This document defines the configuration parameters, memory layout, and LIN commu
 | **PID: Set Configuration** | `uint8_t` | N/A | Config | Read / Write | LIN Protected ID for configuration updates. |
 | **ADC HW Config** | `uint8_t` | N/A | Config | Read / Write | Hardware ADC sample time & hardware accumulator averaging. |
 | **SW Filter Config** | `uint8_t` | N/A | Config | Read / Write | Software digital filtering algorithm & window depth. |
-| **Sensor Voltage Offset** | `uint16_t` | Little-Endian | Config | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$. **`0xFFFF` = Default ($500\,\text{mV}$)**. |
-| **Calibration Gain (Sensitivity)** | `uint16_t` | Little-Endian | Config | Read / Write | Sensor transfer curve sensitivity in $0.1\,\text{mV}/^\circ\text{C}$. **`0` = Default ($10.0\,\text{mV}/^\circ\text{C}$ / $100$)**. |
+| **Sensor Voltage Offset (`offset_mv`)** | `uint16_t` | Little-Endian | Config | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$. **`0xFFFF` = Default ($500\,\text{mV}$)**. |
+| **Calibration Gain (`gain_sens`)** | `uint16_t` | Little-Endian | Config | Read / Write | Sensor transfer curve sensitivity in $0.1\,\text{mV}/^\circ\text{C}$. **`0` = Default ($10.0\,\text{mV}/^\circ\text{C}$ / $100$)**. |
 | **Min Recorded Temperature** | `int16_t` | Little-Endian | Extremes | Read-Only | Lowest recorded temperature ($0.1^\circ\text{C}$). |
 | **Max Recorded Temperature** | `int16_t` | Little-Endian | Extremes | Read-Only | Highest recorded temperature ($0.1^\circ\text{C}$). |
 
@@ -43,7 +43,7 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
              <───── Temperature (2B) + CS ──────────── [Sensor]
 
 [LIN Master] ────── Header (PID_GET_CONFIG) ─────────> [Sensor]
-             <───── Extended Config (13B) + CS ─────── [Sensor]
+             <───── Extended Config (17B) + CS ─────── [Sensor]
 
 [LIN Master] ────── Header + New Config (13B) + CS ──> [Sensor]
              (Sensor updates RAM & commits to Config Flash block)
@@ -69,8 +69,8 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 
 ### 3.2. `PID_GET_CONFIG` (Configuration Read)
 - **Publisher:** Sensor (Slave)
-- **Payload Length:** 13 Data Bytes + Enhanced Checksum
-- **Purpose:** Returns the complete active configuration of the sensor in a single frame.
+- **Payload Length:** 17 Data Bytes + Enhanced Checksum
+- **Purpose:** Returns the complete active configuration and Factory SN in a single frame.
 
 | Byte | Field | Type | Description |
 | :---: | :--- | :---: | :--- |
@@ -87,7 +87,11 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 | **10**| `PID_Set_Config`     | `uint8_t` | Active PID for configuration write requests. |
 | **11**| `ADC_HW_Config`      | `uint8_t` | ADC HW sample time & hardware accumulator. |
 | **12**| `SW_Filter_Config`   | `uint8_t` | SW digital filter mode. |
-| **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..12). |
+| **13**| `Factory_SN_B0`      | `uint8_t` | Factory Serial Number (Byte 0, LSB). |
+| **14**| `Factory_SN_B1`      | `uint8_t` | Factory Serial Number (Byte 1). |
+| **15**| `Factory_SN_B2`      | `uint8_t` | Factory Serial Number (Byte 2). |
+| **16**| `Factory_SN_B3`      | `uint8_t` | Factory Serial Number (Byte 3, MSB). |
+| **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..16). |
 
 ---
 
@@ -118,24 +122,24 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 ## 4. Measurement & Calibration Mathematical Model
 
 ### 4.1. Voltage Offset & Default Sentinel Rule
-The nominal sensor output voltage at $0^\circ\text{C}$ is configurable via `sensor_offset_mV`.
+The nominal sensor output voltage at $0^\circ\text{C}$ is configurable via `offset_mv`.
 Because valid sensor output voltages can legitimately be $0\,\text{mV}$ (e.g. for LM35), **`0` is a valid custom value and NOT the default sentinel**.
 - **Default Sentinel:** The maximum value of `uint16_t` (`0xFFFF` = $65535$).
-- When `sensor_offset_mV == 0xFFFF`, the firmware uses the **default $500\,\text{mV}$** baseline (MCP9700/TMP36).
+- When `offset_mv == 0xFFFF`, the firmware uses the **default $500\,\text{mV}$** baseline (MCP9700/TMP36).
 
 ### 4.2. Sensitivity (Gain) & Default Rule
-`cal_gain` specifies the sensor transfer curve slope in units of **$0.1\,\text{mV}/^\circ\text{C}$**:
+`gain_sens` specifies the sensor transfer curve slope in units of **$0.1\,\text{mV}/^\circ\text{C}$**:
 - **Default Sentinel:** `0` (or `0xFFFF`).
-- When `cal_gain == 0`, firmware uses **default $10.0\,\text{mV}/^\circ\text{C}$** ($S_{\text{effective}} = 100$).
+- When `gain_sens == 0`, firmware uses **default $10.0\,\text{mV}/^\circ\text{C}$** ($S_{\text{effective}} = 100$).
 - Examples: `100` $\rightarrow 10.0\,\text{mV}/^\circ\text{C}$, `195` $\rightarrow 19.5\,\text{mV}/^\circ\text{C}$ (LMT84), `200` $\rightarrow 20.0\,\text{mV}/^\circ\text{C}$.
 
 ### 4.3. Generalized Calculation Formula
 
 $$V_{\text{in\_mV}} = \frac{\text{ADC}_{\text{raw}} \times 3300}{4095}$$
 
-$$V_{\text{offset\_effective}} = \begin{cases} 500 & \text{if } \text{sensor\_offset\_mV} == \text{0xFFFF} \\ \text{sensor\_offset\_mV} & \text{otherwise} \end{cases}$$
+$$V_{\text{offset\_effective}} = \begin{cases} 500 & \text{if } \text{offset\_mv} == \text{0xFFFF} \\ \text{offset\_mv} & \text{otherwise} \end{cases}$$
 
-$$S_{\text{effective}} = \begin{cases} 100 & \text{if } \text{cal\_gain} == 0 \\ \text{cal\_gain} & \text{otherwise} \end{cases}$$
+$$S_{\text{effective}} = \begin{cases} 100 & \text{if } \text{gain\_sens} == 0 \\ \text{gain\_sens} & \text{otherwise} \end{cases}$$
 
 $$T_{\text{final\_x10}} = \frac{(V_{\text{in\_mV}} - V_{\text{offset\_effective}}) \times 100}{S_{\text{effective}}}$$
 
@@ -222,9 +226,9 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 ```c
 #include <stdint.h>
 
-#define FLASH_FACTORY_MAGIC   (0x2626F001U)
-#define FLASH_CONFIG_MAGIC    (0x2626C002U)
-#define FLASH_EXTREMES_MAGIC  (0x2626E003U)
+#define FLASH_FACTORY_MAGIC   (0xFAFAFAFA)
+#define FLASH_CONFIG_MAGIC    (0xC0C0C0C0)
+#define FLASH_EXTREMES_MAGIC  (0xECECECEC)
 
 #define FLASH_FACTORY_ADDR    (0x00001400U)
 #define FLASH_CONFIG_ADDR     (0x00001800U)
@@ -237,10 +241,8 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
  * Block 1: Factory Production Block (Read-Only during normal operation)
  */
 typedef struct __attribute__((packed, aligned(8))) {
-    uint32_t magic;              // 0x2626F001
+    uint32_t magic;              // 0xFAFAFAFA
     uint32_t factory_sn;         // Permanent Serial Number
-    uint32_t hw_revision;        // Hardware version code
-    uint32_t production_date;    // Production timestamp / lot ID
 } FactoryBlock_t;
 
 /*
@@ -248,32 +250,29 @@ typedef struct __attribute__((packed, aligned(8))) {
  */
 typedef struct __attribute__((packed, aligned(8))) {
     // 64-bit Chunk 1
-    uint32_t magic;              // 0x2626C002
+    uint32_t magic;              // 0xC0C0C0C0
     uint32_t logical_node_id;    // 32-bit system position ID
 
     // 64-bit Chunk 2
-    uint16_t sensor_offset_mV;   // Offset in mV at 0 deg C (0xFFFF = 500 mV)
-    uint16_t cal_gain;           // Sensitivity in 0.1 mV/deg C (0 = 100 = 10.0 mV/deg C)
+    uint16_t offset_mv;          // Offset in mV at 0 deg C (0xFFFF = 500 mV)
+    uint16_t gain_sens;          // Sensitivity in 0.1 mV/deg C (0 = 100 = 10.0 mV/deg C)
     uint8_t  pid_get_temp;       // Configured PID for temperature
     uint8_t  pid_get_config;     // Configured PID for read config
     uint8_t  pid_set_config;     // Configured PID for write config
-    uint8_t  reserved_pad;       // Padding for alignment
+    uint8_t  filter_hw_adc;      // ADC HW Averaging & Sample Time
 
     // 64-bit Chunk 3
-    uint8_t  adc_hw_config;      // ADC HW Averaging & Sample Time
-    uint8_t  sw_filter_config;   // SW Digital Filter mode
-    uint8_t  reserved[6];        // Reserved for future parameters
+    uint8_t  filter_sw_mode;     // SW Digital Filter mode
+    uint8_t  _padding[7];        // Pad to 24 bytes (multiple of 8 for Flash ECC)
 } ConfigBlock_t;
 
 /*
  * Block 3: Telemetry & Extremes Block (Updated dynamically based on write policy)
  */
 typedef struct __attribute__((packed, aligned(8))) {
-    uint32_t magic;              // 0x2626E003
-    uint32_t write_counter;      // Lifetime wear-leveling / write counter
-    int16_t  min_recorded_temp;  // Lowest recorded temp (0.1 deg C)
-    int16_t  max_recorded_temp;  // Highest recorded temp (0.1 deg C)
-    uint8_t  reserved[4];        // Padding to 64-bit alignment
+    uint32_t magic;              // 0xECECECEC
+    int16_t  min_temp;           // Lowest recorded temp (0.1 deg C)
+    int16_t  max_temp;           // Highest recorded temp (0.1 deg C)
 } ExtremesBlock_t;
 ```
 
@@ -284,10 +283,10 @@ typedef struct __attribute__((packed, aligned(8))) {
 If the Configuration Block signature is invalid (`magic != FLASH_CONFIG_MAGIC`), RAM variables load standard defaults:
 
 - `logical_node_id`: `0x00000001`
-- `sensor_offset_mV`: `OFFSET_MV_DEFAULT` ($500\,\text{mV}$)
-- `cal_gain`: `GAIN_SENS_DEFAULT` ($10.0\,\text{mV}/^\circ\text{C}$)
+- `offset_mv`: `OFFSET_MV_DEFAULT` ($500\,\text{mV}$)
+- `gain_sens`: `GAIN_SENS_DEFAULT` ($10.0\,\text{mV}/^\circ\text{C}$)
 - `pid_get_temp`: `0x0A` (Default `LIN_SEND_TEMP_PID`)
 - `pid_get_config`: `0x0B`
 - `pid_set_config`: `0x0C`
-- `adc_hw_config`: `0x44` (32x HW average, 512 cycles sample time)
-- `sw_filter_config`: `0x01` (4-sample moving average)
+- `adc_hw_config`: `0x00` (1x HW average, 32 cycles sample time)
+- `sw_filter_config`: `0x00` (Passthrough, no software filter)

@@ -235,10 +235,15 @@ void LIN_INST_IRQHandler(void)
                         txBuffer[11] = gActiveConfig.filter_hw_adc;
                         txBuffer[12] = gActiveConfig.filter_sw_mode;
                         
-                        txBuffer[13] = calcChecksum(rxByte, txBuffer, 13);
+                        txBuffer[13] = (uint8_t)(gActiveFactory.factory_sn & 0xFF);
+                        txBuffer[14] = (uint8_t)((gActiveFactory.factory_sn >> 8) & 0xFF);
+                        txBuffer[15] = (uint8_t)((gActiveFactory.factory_sn >> 16) & 0xFF);
+                        txBuffer[16] = (uint8_t)((gActiveFactory.factory_sn >> 24) & 0xFF);
+                        
+                        txBuffer[17] = calcChecksum(rxByte, txBuffer, 17);
                         
                         txBufferIx = 1;
-                        txBufferLen = 14;
+                        txBufferLen = 18;
                         
                         DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                         DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);

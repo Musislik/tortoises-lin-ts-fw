@@ -46,7 +46,7 @@ void configInit(void) {
 }
 
 bool configSaveUser(const ConfigBlock_t *newConfig) {
-    DL_FlashCTL_clearCommandStatus(FLASHCTL);
+    DL_FlashCTL_executeClearStatus(FLASHCTL);
     DL_FlashCTL_unprotectSector(FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
 
     DL_FLASHCTL_COMMAND_STATUS status = DL_FlashCTL_eraseMemoryFromRAM(FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);
@@ -66,11 +66,12 @@ bool configSaveUser(const ConfigBlock_t *newConfig) {
             return false;
         }
     }
+    DL_FlashCTL_executeClearStatus(FLASHCTL);
     return true;
 }
 
 bool configSaveExtremes(const ExtremesBlock_t *newExtremes) {
-    DL_FlashCTL_clearCommandStatus(FLASHCTL);
+    DL_FlashCTL_executeClearStatus(FLASHCTL);
     DL_FlashCTL_unprotectSector(FLASHCTL, EXTREMES_BLOCK_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
 
     DL_FLASHCTL_COMMAND_STATUS status = DL_FlashCTL_eraseMemoryFromRAM(FLASHCTL, EXTREMES_BLOCK_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);

@@ -54,7 +54,7 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 ### 3.1. `PID_GET_TEMP` (Temperature Read)
 - **Publisher:** Sensor (Slave)
 - **Payload Length:** 2 Data Bytes + Enhanced Checksum
-- **Encoding:** Little-Endian `int16_t` temperature in units of $0.1^\circ\text{C}$.
+- **Encoding:** Little-Endian `int16_t` temperature in units of $0.1^\circ\text{C}$ (Byte 0 = LSB, Byte 1 = MSB).
 
 | Byte | Field | Type | Description |
 | :---: | :--- | :---: | :--- |
@@ -74,23 +74,23 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 
 | Byte | Field | Type | Description |
 | :---: | :--- | :---: | :--- |
-| **0** | `Logical_Node_ID_B0` | `uint8_t` | Logical Node ID (Byte 0, LSB). |
-| **1** | `Logical_Node_ID_B1` | `uint8_t` | Logical Node ID (Byte 1). |
-| **2** | `Logical_Node_ID_B2` | `uint8_t` | Logical Node ID (Byte 2). |
-| **3** | `Logical_Node_ID_B3` | `uint8_t` | Logical Node ID (Byte 3, MSB). |
-| **4** | `Offset_mV_LSB`      | `uint8_t` | Sensor Voltage Offset at $0^\circ\text{C}$ in $\text{mV}$ (LSB). |
-| **5** | `Offset_mV_MSB`      | `uint8_t` | Sensor Voltage Offset at $0^\circ\text{C}$ in $\text{mV}$ (MSB, `0xFFFF` = Default). |
-| **6** | `Cal_Gain_LSB`       | `uint8_t` | Sensitivity LSB ($0.1\,\text{mV}/^\circ\text{C}$, `0` = Default $10.0\,\text{mV}/^\circ\text{C}$). |
-| **7** | `Cal_Gain_MSB`       | `uint8_t` | Sensitivity MSB ($0.1\,\text{mV}/^\circ\text{C}$). |
-| **8** | `PID_Get_Temp`       | `uint8_t` | Active PID for temperature requests. |
-| **9** | `PID_Get_Config`     | `uint8_t` | Active PID for configuration read requests. |
-| **10**| `PID_Set_Config`     | `uint8_t` | Active PID for configuration write requests. |
-| **11**| `ADC_HW_Config`      | `uint8_t` | ADC HW sample time & hardware accumulator. |
-| **12**| `SW_Filter_Config`   | `uint8_t` | SW digital filter mode. |
-| **13**| `Factory_SN_B0`      | `uint8_t` | Factory Serial Number (Byte 0, LSB). |
-| **14**| `Factory_SN_B1`      | `uint8_t` | Factory Serial Number (Byte 1). |
-| **15**| `Factory_SN_B2`      | `uint8_t` | Factory Serial Number (Byte 2). |
-| **16**| `Factory_SN_B3`      | `uint8_t` | Factory Serial Number (Byte 3, MSB). |
+| **0** | `Factory_SN_B0`      | `uint8_t` | Factory Serial Number (Byte 0, LSB). |
+| **1** | `Factory_SN_B1`      | `uint8_t` | Factory Serial Number (Byte 1). |
+| **2** | `Factory_SN_B2`      | `uint8_t` | Factory Serial Number (Byte 2). |
+| **3** | `Factory_SN_B3`      | `uint8_t` | Factory Serial Number (Byte 3, MSB). |
+| **4** | `Logical_Node_ID_B0` | `uint8_t` | Logical Node ID (Byte 0, LSB). |
+| **5** | `Logical_Node_ID_B1` | `uint8_t` | Logical Node ID (Byte 1). |
+| **6** | `Logical_Node_ID_B2` | `uint8_t` | Logical Node ID (Byte 2). |
+| **7** | `Logical_Node_ID_B3` | `uint8_t` | Logical Node ID (Byte 3, MSB). |
+| **8** | `Offset_mV_LSB`      | `uint8_t` | Sensor Voltage Offset at $0^\circ\text{C}$ in $\text{mV}$ (LSB). |
+| **9** | `Offset_mV_MSB`      | `uint8_t` | Sensor Voltage Offset at $0^\circ\text{C}$ in $\text{mV}$ (MSB, `0xFFFF` = Default). |
+| **10**| `Cal_Gain_LSB`       | `uint8_t` | Sensitivity LSB ($0.1\,\text{mV}/^\circ\text{C}$, `0` = Default $10.0\,\text{mV}/^\circ\text{C}$). |
+| **11**| `Cal_Gain_MSB`       | `uint8_t` | Sensitivity MSB ($0.1\,\text{mV}/^\circ\text{C}$). |
+| **12**| `PID_Get_Temp`       | `uint8_t` | Active PID for temperature requests. |
+| **13**| `PID_Get_Config`     | `uint8_t` | Active PID for configuration read requests. |
+| **14**| `PID_Set_Config`     | `uint8_t` | Active PID for configuration write requests. |
+| **15**| `ADC_HW_Config`      | `uint8_t` | ADC HW sample time & hardware accumulator. |
+| **16**| `SW_Filter_Config`   | `uint8_t` | SW digital filter mode. |
 | **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..16). |
 
 ---
@@ -227,7 +227,7 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 #include <stdint.h>
 
 #define FLASH_FACTORY_MAGIC   (0xFAFAFAFA)
-#define FLASH_CONFIG_MAGIC    (0xC0C0C0C0)
+#define FLASH_CONFIG_MAGIC    (0xC0C0C0C1)
 #define FLASH_EXTREMES_MAGIC  (0xECECECEC)
 
 #define FLASH_FACTORY_ADDR    (0x00001400U)
@@ -285,8 +285,8 @@ If the Configuration Block signature is invalid (`magic != FLASH_CONFIG_MAGIC`),
 - `logical_node_id`: `0x00000001`
 - `offset_mv`: `OFFSET_MV_DEFAULT` ($500\,\text{mV}$)
 - `gain_sens`: `GAIN_SENS_DEFAULT` ($10.0\,\text{mV}/^\circ\text{C}$)
-- `pid_get_temp`: `0x0A` (Default `LIN_SEND_TEMP_PID`)
-- `pid_get_config`: `0x0B`
-- `pid_set_config`: `0x0C`
+- `pid_get_temp`: `0x1D` (Default `PID_GET_TEMP_DEFAULT`)
+- `pid_get_config`: `0x1E` (Default `PID_GET_CONFIG_DEFAULT`)
+- `pid_set_config`: `0x1F` (Default `PID_SET_CONFIG_DEFAULT`)
 - `adc_hw_config`: `0x00` (1x HW average, 32 cycles sample time)
 - `sw_filter_config`: `0x00` (Passthrough, no software filter)

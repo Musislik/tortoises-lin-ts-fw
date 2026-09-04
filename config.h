@@ -9,16 +9,16 @@
 #define EXTREMES_BLOCK_ADDR 0x1C00
 
 #define FACTORY_MAGIC  0xFAFAFAFA
-#define CONFIG_MAGIC   0xC0C0C0C0
+#define CONFIG_MAGIC   0xC0C0C0C1
 #define EXTREMES_MAGIC 0xECECECEC
 
 #define OFFSET_MV_DEFAULT 0xFFFF // Default maximum uint16_t which means default offset
 #define GAIN_SENS_DEFAULT 0x0000 // Default 0 means default gain
 
-// PIDs baseline
-#define PID_GET_TEMP_DEFAULT   0x0A
-#define PID_GET_CONFIG_DEFAULT 0x0B
-#define PID_SET_CONFIG_DEFAULT 0x0C
+// PIDs baseline (+3 for testing Device 0 in Pyxis: 0x20, 0x21, 0x22)
+#define PID_GET_TEMP_DEFAULT   0x20
+#define PID_GET_CONFIG_DEFAULT 0x21
+#define PID_SET_CONFIG_DEFAULT 0x22
 
 typedef struct __attribute__((packed, aligned(8))) {
     uint32_t magic;

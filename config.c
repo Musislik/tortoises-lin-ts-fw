@@ -2,8 +2,21 @@
 #include "ti_msp_dl_config.h"
 #include <string.h>
 
-ConfigBlock_t gActiveConfig = {0};
-FactoryBlock_t gActiveFactory = {0};
+ConfigBlock_t gActiveConfig = {
+    .magic = CONFIG_MAGIC,
+    .logical_node_id = 1,
+    .offset_mv = OFFSET_MV_DEFAULT,
+    .gain_sens = GAIN_SENS_DEFAULT,
+    .pid_get_temp = PID_GET_TEMP_DEFAULT,
+    .pid_get_config = PID_GET_CONFIG_DEFAULT,
+    .pid_set_config = PID_SET_CONFIG_DEFAULT,
+    .filter_hw_adc = 0,
+    .filter_sw_mode = 0
+};
+FactoryBlock_t gActiveFactory = {
+    .magic = FACTORY_MAGIC,
+    .factory_sn = 0x12345678
+};
 ExtremesBlock_t gActiveExtremes = {0};
 
 void configInit(void) {

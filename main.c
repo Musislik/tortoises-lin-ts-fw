@@ -1,84 +1,86 @@
 /*
  * Copyright (c) 2021, Texas Instruments Incorporated
  * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- * *  Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *
- * *  Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * *  Neither the name of Texas Instruments Incorporated nor the names of
- *    its contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
- * THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
- * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
- * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
- * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
- * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 #include "ti_msp_dl_config.h"
-#include "defs.h"
+// Defines for LIN
+#define LIN_RX_BUFFER_LEN 32
+#define LIN_TX_BUFFER_LEN 32
+#define LIN_SYNC_BYTE (0x55)
+
+/**
+ * @brief Checks if LIN is in a state expecting data.
+ */
+#define LIN_DATA_EXPECTED() ((linRxState == LIN_RX_STATE_AWAITING) || (linRxState == LIN_RX_STATE_PID))
+
+/**
+ * @brief Represents the global LIN state machine states.
+ */
+typedef enum {
+    LIN_STATE_INIT = 0,
+    LIN_STATE_IDLE = 1,
+    LIN_STATE_RX = 2,
+    LIN_STATE_TX = 3,
+    LIN_STATE_FAULT = 4
+} LinState_t;
+
+/**
+ * @brief Represents the LIN RX specific state machine states.
+ */
+typedef enum {
+    LIN_RX_STATE_INIT = 0,
+    LIN_RX_STATE_IDLE = 1,
+    LIN_RX_STATE_AWAITING = 2,
+    LIN_RX_STATE_PID = 3,
+    LIN_RX_STATE_RX_DATA = 4,
+    LIN_RX_STATE_FAULT = 5
+} LinRxState_t;
 #include "adc.h"
+#include "config.h"
+#include "filter.h"
+#include "telemetry.h"
 
-volatile int16_t tempCal = 0;
-volatile bool flagSaveTempCal = false;
-
-volatile linRxState_t linRxState = LIN_RX_STATE_INIT;
-uint8_t rxBuffer[LIN_RX_BUFFER_LEN] = {0};
-uint32_t rxBufferLen = 0;
-uint32_t rxBufferIx = 0;
-volatile bool flagCallRxHandler;
-
+// Variables for LIN TX/RX
 uint8_t txBuffer[LIN_TX_BUFFER_LEN] = {0};
 volatile uint32_t txBufferIx = 0;
 volatile uint32_t txBufferLen = 0;
 
-extern int16_t loadTempCal(void);
-extern void saveTempCal(int16_t);
-extern void adcInit(void);
+uint8_t rxBuffer[LIN_RX_BUFFER_LEN] = {0};
+volatile uint32_t rxBufferIx = 0;
+volatile uint32_t expectedRxLen = 0;
+volatile uint8_t activeRxPid = 0;
 
-void printTemp()
-{
-        char *adc_msg = " | ADC: ";
-        while (*adc_msg) {
-            DL_UART_Extend_transmitDataBlocking(LIN_INST, *adc_msg++);
-        }
-        uint32_t temp = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
-        char buffer[10];
-        int idx = 0;
+volatile LinRxState_t linRxState = LIN_RX_STATE_INIT;
 
-        do {
-            buffer[idx++] = (temp % 10) + '0';
-            temp /= 10;
-        } while (temp > 0);
+// SYSTICK for telemetry and ADC timing
+volatile uint32_t systick_1ms_counter = 0;
+volatile uint32_t systick_1s_counter = 0;
+volatile uint32_t systick_100ms_counter = 0;
+volatile bool tick_1s_flag = false;
+volatile bool tick_100ms_flag = false;
 
-        while (idx > 0) {
-            DL_UART_Extend_transmitDataBlocking(LIN_INST, buffer[--idx]);
-        }
-}
+// Pending config save from ISR
+volatile bool gPendingConfigSave = false;
+ConfigBlock_t gPendingConfig;
 
-int32_t calcTempx10(uint32_t adc_raw)
-{
-    int32_t voltage_mV = ((int32_t)adc_raw * 3300) / 4095;
-    int16_t temp_C_x10 = (int16_t)(voltage_mV - 500);       // 5.6 degC = 56
+// Latest measured temperature available to LIN ISR
+volatile int16_t gLatestTemperature = 0;
 
-    temp_C_x10 = temp_C_x10 - tempCal;
+void SysTick_Handler(void) {
+    systick_1ms_counter++;
+    systick_1s_counter++;
+    systick_100ms_counter++;
 
-    return temp_C_x10;
+    if (systick_1s_counter >= 1000) {
+        systick_1s_counter = 0;
+        tick_1s_flag = true;
+    }
+
+    if (systick_100ms_counter >= 100) {
+        systick_100ms_counter = 0;
+        tick_100ms_flag = true;
+    }
 }
 
 uint8_t calcChecksum(uint8_t pid, const uint8_t *buffer, uint8_t length)
@@ -96,82 +98,27 @@ uint8_t calcChecksum(uint8_t pid, const uint8_t *buffer, uint8_t length)
     return (uint8_t)(~sum);
 }
 
-void LIN_RX_Handler(uint8_t rxByte)
+void initHardware(void)
 {
-    uint8_t linPid;
-    switch (linRxState) {
-        case LIN_RX_STATE_AWAITING:
-        {
-            // Sync byte expected
-            rxBufferLen = 0;
-
-            if (rxByte == LIN_SYNC_BYTE)
-                linRxState = LIN_RX_STATE_PID;
-            else
-                linRxState = LIN_RX_STATE_IDLE;
-            break;
-        }
-        case LIN_RX_STATE_PID:
-        {
-            linPid = rxByte;
-
-            if (linPid == LIN_SEND_TEMP_PID)
-            {
-                linRxState = LIN_RX_STATE_IDLE;
-                //LIN_STATE = LIN_STATE_TX;
-                rxBufferLen = 0;
-
-                uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
-                int32_t temp = calcTempx10(adcTempVal);
-
-                txBuffer[0] = (uint8_t)((temp >> 8) & 0xFF);
-                txBuffer[1] = (uint8_t)((temp) & 0xFF);
-                txBuffer[2] = calcChecksum(LIN_SEND_TEMP_PID, txBuffer, 2);
-
-                DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
-                txBufferIx = 1;
-                txBufferLen = 3;
-
-                DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
-                break;
-            }
-            rxBufferLen = 0;
-            break;
-
-        }
-        default:
-        {
-            break;
-        }
-    }
-}
-
-int main(void)
-{
-    //DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX);
     SYSCFG_DL_init();
-
-    //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
-
-    delay_cycles(240000000);    // 10s delay for SWD
-
-    //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
+    delay_cycles(240000000); // 10s delay for SWD
     delay_cycles(240000);
 
-    DL_GPIO_initDigitalOutput(IOMUX_PINCM20);       // Init GPIO - LIN enable pin
+    // Init GPIO - LIN enable pin
+    DL_GPIO_initDigitalOutput(IOMUX_PINCM20);
     DL_GPIO_clearPins(GPIOA, DL_GPIO_PIN_19);
-    DL_GPIO_enableOutput(GPIOA, DL_GPIO_PIN_19);    //
-    DL_GPIO_setPins(GPIOA, DL_GPIO_PIN_19);         // Enable LIN tranceiver
+    DL_GPIO_enableOutput(GPIOA, DL_GPIO_PIN_19);
+    DL_GPIO_setPins(GPIOA, DL_GPIO_PIN_19); // Enable LIN transceiver
 
-    //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
     delay_cycles(240000);
 
-    //tempCal = loadTempCal();
-
-    adcInit();     // Init DMA so it transfers ADC result to temp_raw variable
-
-
-    // Interrupt settings
+    configInit();
+    filterInit();
+    telemetryInit();
+    
+    adcInit(); // Init ADC so it transfers result to memory
+    
+    // LIN UART Interrupt settings
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX);
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_FRAMING_ERROR);
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX_TIMEOUT_ERROR);
@@ -179,83 +126,209 @@ int main(void)
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_LIN_COUNTER_OVERFLOW);
     DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_LINC0_MATCH);
 
-    //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
     delay_cycles(240000);
 
     NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
     NVIC_EnableIRQ(LIN_INST_INT_IRQN);
+    
+    // Setup SysTick for 1ms
+    SysTick_Config(CPUCLK_FREQ / 1000);
+
     __enable_irq();
 
-    //DL_GPIO_togglePins(GPIO_PORT, GPIO_DBG_PIN);
     delay_cycles(240000);
+}
 
-    //DL_UART_transmitDataBlocking(LIN_INST, 0x56);
+int main(void)
+{
+    initHardware();
+
+    // Start first conversion
+    DL_ADC12_startConversion(ADC12_0_INST);
 
     while (1) {
-        if (flagSaveTempCal) {
-            flagSaveTempCal = false;
-            saveTempCal(tempCal);
-        }
-        if (flagCallRxHandler == true) {
-            flagCallRxHandler = false;
-            LIN_RX_Handler(rxBuffer[rxBufferLen - 1]);
+        if (gPendingConfigSave) {
+            __disable_irq();
+            ConfigBlock_t newCfg = gPendingConfig;
+            gPendingConfigSave = false;
+            __enable_irq();
+
+            configSaveUser(&newCfg);
+            adcReconfigure(newCfg.filter_hw_adc);
+            filterInit(); // Reset software filter
+            
+            // Start a new conversion after reconfiguring ADC
+            DL_ADC12_startConversion(ADC12_0_INST);
         }
 
-        //__WFI();
+        if (tick_100ms_flag) {
+            tick_100ms_flag = false;
+            
+            // Read ADC result of the previous 100ms cycle
+            uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
+            
+            uint32_t filteredAdc = filterProcess(adcTempVal, gActiveConfig.filter_sw_mode);
+            int32_t temp = calcTemperature(filteredAdc, gActiveConfig.offset_mv, gActiveConfig.gain_sens);
+            
+            // Atomic update of global temp for LIN ISR
+            __disable_irq();
+            gLatestTemperature = (int16_t)temp;
+            __enable_irq();
+
+            // Run telemetry (will safely write Flash if needed)
+            telemetryUpdate((int16_t)temp);
+
+            // Start next ADC conversion for the next 100ms cycle
+            DL_ADC12_startConversion(ADC12_0_INST);
+        }
+
+        if (tick_1s_flag) {
+            tick_1s_flag = false;
+            telemetryTick();
+        }
+
+        // Sleep safely (wake up on any interrupt)
+        __WFI();
     }
 }
 
 void LIN_INST_IRQHandler(void)
 {
-    uint8_t rxByte;
-
-    /// Break detection
     uint32_t pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH | DL_UART_INTERRUPT_RX);
 
+    // Break detection
     if ((pendingFlags & DL_UART_INTERRUPT_LINC0_MATCH) == DL_UART_INTERRUPT_LINC0_MATCH)
     {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
-
         linRxState = LIN_RX_STATE_AWAITING;
         return;
     }
 
     pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW);
 
-    /// Lin counter overflow
+    // LIN counter overflow
     if ((pendingFlags & DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) == DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW)
     {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW);
-
         return;
     }
 
-
     switch (DL_UART_Extend_getPendingInterrupt(LIN_INST))
     {
-
-        case DL_UART_EXTEND_IIDX_RX:    // Data received
+        case DL_UART_EXTEND_IIDX_RX: // Data received
         {
-            rxByte = DL_UART_Extend_receiveData(LIN_INST);
+            uint8_t rxByte = DL_UART_Extend_receiveData(LIN_INST);
 
-            if (LinDataExpected() && ((rxBufferLen + 1) < LIN_RX_BUFFER_LEN))
-            {
-                rxBuffer[rxBufferLen] = rxByte;
-                rxBufferLen++;
-                flagCallRxHandler = true;
+            switch (linRxState) {
+                case LIN_RX_STATE_AWAITING:
+                    if (rxByte == LIN_SYNC_BYTE) {
+                        linRxState = LIN_RX_STATE_PID;
+                    } else {
+                        linRxState = LIN_RX_STATE_IDLE;
+                    }
+                    break;
+
+                case LIN_RX_STATE_PID:
+                    if (rxByte == gActiveConfig.pid_get_temp)
+                    {
+                        linRxState = LIN_RX_STATE_IDLE;
+
+                        // Fast reply using latest prepared temp
+                        int16_t temp = gLatestTemperature;
+
+                        // Little-endian
+                        txBuffer[0] = (uint8_t)(temp & 0xFF);
+                        txBuffer[1] = (uint8_t)((temp >> 8) & 0xFF);
+                        txBuffer[2] = calcChecksum(rxByte, txBuffer, 2);
+
+                        txBufferIx = 1;
+                        txBufferLen = 3;
+
+                        DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
+                        DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
+                    }
+                    else if (rxByte == gActiveConfig.pid_get_config)
+                    {
+                        linRxState = LIN_RX_STATE_IDLE;
+                        
+                        // Populate 13 bytes
+                        txBuffer[0] = (uint8_t)(gActiveConfig.logical_node_id & 0xFF);
+                        txBuffer[1] = (uint8_t)((gActiveConfig.logical_node_id >> 8) & 0xFF);
+                        txBuffer[2] = (uint8_t)((gActiveConfig.logical_node_id >> 16) & 0xFF);
+                        txBuffer[3] = (uint8_t)((gActiveConfig.logical_node_id >> 24) & 0xFF);
+                        txBuffer[4] = (uint8_t)(gActiveConfig.offset_mv & 0xFF);
+                        txBuffer[5] = (uint8_t)((gActiveConfig.offset_mv >> 8) & 0xFF);
+                        txBuffer[6] = (uint8_t)(gActiveConfig.gain_sens & 0xFF);
+                        txBuffer[7] = (uint8_t)((gActiveConfig.gain_sens >> 8) & 0xFF);
+                        txBuffer[8] = gActiveConfig.pid_get_temp;
+                        txBuffer[9] = gActiveConfig.pid_get_config;
+                        txBuffer[10] = gActiveConfig.pid_set_config;
+                        txBuffer[11] = gActiveConfig.filter_hw_adc;
+                        txBuffer[12] = gActiveConfig.filter_sw_mode;
+                        
+                        txBuffer[13] = (uint8_t)(gActiveFactory.factory_sn & 0xFF);
+                        txBuffer[14] = (uint8_t)((gActiveFactory.factory_sn >> 8) & 0xFF);
+                        txBuffer[15] = (uint8_t)((gActiveFactory.factory_sn >> 16) & 0xFF);
+                        txBuffer[16] = (uint8_t)((gActiveFactory.factory_sn >> 24) & 0xFF);
+                        
+                        txBuffer[17] = calcChecksum(rxByte, txBuffer, 17);
+                        
+                        txBufferIx = 1;
+                        txBufferLen = 18;
+                        
+                        DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
+                        DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
+                    }
+                    else if (rxByte == gActiveConfig.pid_set_config)
+                    {
+                        // We need to receive 13 bytes + checksum
+                        linRxState = LIN_RX_STATE_RX_DATA;
+                        rxBufferIx = 0;
+                        expectedRxLen = 14; // 13 data + 1 cs
+                        activeRxPid = rxByte;
+                    }
+                    else
+                    {
+                        linRxState = LIN_RX_STATE_IDLE;
+                    }
+                    break;
+                    
+                case LIN_RX_STATE_RX_DATA:
+                    rxBuffer[rxBufferIx++] = rxByte;
+                    if (rxBufferIx >= expectedRxLen) {
+                        linRxState = LIN_RX_STATE_IDLE;
+                        
+                        // Validate checksum
+                        uint8_t cs = calcChecksum(activeRxPid, rxBuffer, 13);
+                        if (cs == rxBuffer[13]) {
+                            // Valid frame, parse it
+                            ConfigBlock_t newConfig = gActiveConfig;
+                            newConfig.logical_node_id = ((uint32_t)rxBuffer[3] << 24) | ((uint32_t)rxBuffer[2] << 16) | ((uint32_t)rxBuffer[1] << 8) | rxBuffer[0];
+                            newConfig.offset_mv = ((uint16_t)rxBuffer[5] << 8) | rxBuffer[4];
+                            newConfig.gain_sens = ((uint16_t)rxBuffer[7] << 8) | rxBuffer[6];
+                            newConfig.pid_get_temp = rxBuffer[8];
+                            newConfig.pid_get_config = rxBuffer[9];
+                            newConfig.pid_set_config = rxBuffer[10];
+                            newConfig.filter_hw_adc = rxBuffer[11];
+                            newConfig.filter_sw_mode = rxBuffer[12];
+                            
+                            // Signal main loop to save to flash
+                            gPendingConfig = newConfig;
+                            gPendingConfigSave = true;
+                        }
+                    }
+                    break;
+
+                default:
+                    break;
             }
-            else
-            {
-                DL_UART_Extend_receiveData(LIN_INST);
-                break;
-            }
+            break;
         }
         case DL_UART_EXTEND_IIDX_TX:
         {
-            if(txBufferIx < txBufferLen)
+            if (txBufferIx < txBufferLen)
             {
-                DL_UART_Extend_transmitData(LIN_INST, txBuffer[txBufferIx]);
-                txBufferIx++;
+                DL_UART_Extend_transmitData(LIN_INST, txBuffer[txBufferIx++]);
             }
             else
             {
@@ -265,44 +338,30 @@ void LIN_INST_IRQHandler(void)
         }
         case DL_UART_EXTEND_IIDX_FRAMING_ERROR:
         {
-            NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
             DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_MAIN_INTERRUPT_FRAMING_ERROR);
-            DL_UART_Extend_receiveData(LIN_INST);
+            DL_UART_Extend_receiveData(LIN_INST); // Clear data
             break;
         }
         case DL_UART_EXTEND_IIDX_OVERRUN_ERROR:
         {
-            NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
             DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_MAIN_INTERRUPT_OVERRUN_ERROR);
-            DL_UART_Extend_receiveData(LIN_INST);
+            DL_UART_Extend_receiveData(LIN_INST); // Clear data
             break;
         }
         case DL_UART_EXTEND_IIDX_BREAK_ERROR:
         {
-            NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
             DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_MAIN_INTERRUPT_BREAK_ERROR);
             break;
         }
         case DL_UART_EXTEND_INTERRUPT_RX_TIMEOUT_ERROR:
         {
-            NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
             DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX_TIMEOUT_ERROR);
             break;
         }
         default:
         {
-            DL_UART_Extend_receiveData(LIN_INST);
-            NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
+            DL_UART_Extend_receiveData(LIN_INST); // Clear unused data
             break;
         }
     }
-            /*if (current_pid == 8) // Calibration
-            {
-                temp_raw = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
-                temp = calcTempx10(temp_raw);
-
-                tempCal = tempCal + temp;
-                flagSaveTempCal = true;
-            }*/
-
 }

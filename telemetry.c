@@ -14,8 +14,8 @@ static uint32_t settlingTimer = 0;
 static bool needsCommit = false;
 
 void telemetryInit(void) {
-    gCurrentMinTemp = gActiveExtremes.min_temp;
-    gCurrentMaxTemp = gActiveExtremes.max_temp;
+    gCurrentMinTemp = gActiveExtremes.minTemp;
+    gCurrentMaxTemp = gActiveExtremes.maxTemp;
     gLastCommittedMinTemp = gCurrentMinTemp;
     gLastCommittedMaxTemp = gCurrentMaxTemp;
     settlingTimer = 0;
@@ -46,8 +46,8 @@ void telemetryUpdate(int16_t newTemp) {
         if (minDelta >= EXTREME_SIGNIFICANT_DELTA_X10 || maxDelta >= EXTREME_SIGNIFICANT_DELTA_X10) {
             // Immediate commit
             ExtremesBlock_t newExt;
-            newExt.min_temp = gCurrentMinTemp;
-            newExt.max_temp = gCurrentMaxTemp;
+            newExt.minTemp = gCurrentMinTemp;
+            newExt.maxTemp = gCurrentMaxTemp;
             configSaveExtremes(&newExt);
             
             gLastCommittedMinTemp = gCurrentMinTemp;
@@ -62,8 +62,8 @@ void telemetryTick(void) {
         settlingTimer++;
         if (settlingTimer >= SETTLING_TIME_SEC) {
             ExtremesBlock_t newExt;
-            newExt.min_temp = gCurrentMinTemp;
-            newExt.max_temp = gCurrentMaxTemp;
+            newExt.minTemp = gCurrentMinTemp;
+            newExt.maxTemp = gCurrentMaxTemp;
             configSaveExtremes(&newExt);
             
             gLastCommittedMinTemp = gCurrentMinTemp;

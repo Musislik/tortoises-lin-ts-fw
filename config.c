@@ -1,6 +1,17 @@
 #include "config.h"
-#include "ti_msp_dl_config.h"
+#include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
+#include "ti_msp_dl_config.h"
+
+#define FACTORY_SN_UNKNOWN      0xFFFFFFFF
+#define LOGICAL_NODE_ID_DEFAULT 1
+#define FILTER_HW_ADC_DEFAULT   0
+#define FILTER_SW_MODE_DEFAULT  0
+#define MIN_TEMP_DEFAULT        0x7FFF
+#define MAX_TEMP_DEFAULT        ((int16_t)0x8000)
+#define FLASH_BLOCK_SIZE_BYTES  8
+#define FLASH_WORDS_PER_BLOCK   2
 
 ConfigBlock_t gActiveConfig = {0};
 FactoryBlock_t gActiveFactory = {0};
@@ -13,7 +24,7 @@ void configInit(void) {
         memcpy(&gActiveFactory, fb, sizeof(FactoryBlock_t));
     } else {
         gActiveFactory.magic = FACTORY_MAGIC;
-        gActiveFactory.factory_sn = 0xFFFFFFFF; // Unknown
+        gActiveFactory.factorySn = FACTORY_SN_UNKNOWN; // Unknown
     }
 
     // Check Config block
@@ -23,14 +34,14 @@ void configInit(void) {
     } else {
         // Load defaults
         gActiveConfig.magic = CONFIG_MAGIC;
-        gActiveConfig.logical_node_id = 1;
-        gActiveConfig.offset_mv = OFFSET_MV_DEFAULT;
-        gActiveConfig.gain_sens = GAIN_SENS_DEFAULT;
-        gActiveConfig.pid_get_temp = PID_GET_TEMP_DEFAULT;
-        gActiveConfig.pid_get_config = PID_GET_CONFIG_DEFAULT;
-        gActiveConfig.pid_set_config = PID_SET_CONFIG_DEFAULT;
-        gActiveConfig.filter_hw_adc = 0; // Default HW filter
-        gActiveConfig.filter_sw_mode = 0; // Default SW filter
+        gActiveConfig.logicalNodeId = LOGICAL_NODE_ID_DEFAULT;
+        gActiveConfig.offsetMv = OFFSET_MV_DEFAULT;
+        gActiveConfig.gainSens = GAIN_SENS_DEFAULT;
+        gActiveConfig.pidGetTemp = PID_GET_TEMP_DEFAULT;
+        gActiveConfig.pidGetConfig = PID_GET_CONFIG_DEFAULT;
+        gActiveConfig.pidSetConfig = PID_SET_CONFIG_DEFAULT;
+        gActiveConfig.filterHwAdc = FILTER_HW_ADC_DEFAULT;
+        gActiveConfig.filterSwMode = FILTER_SW_MODE_DEFAULT;
         memset(gActiveConfig._padding, 0xFF, sizeof(gActiveConfig._padding));
     }
 
@@ -40,8 +51,8 @@ void configInit(void) {
         memcpy(&gActiveExtremes, eb, sizeof(ExtremesBlock_t));
     } else {
         gActiveExtremes.magic = EXTREMES_MAGIC;
-        gActiveExtremes.min_temp = 0x7FFF;
-        gActiveExtremes.max_temp = (int16_t)0x8000;
+        gActiveExtremes.minTemp = MIN_TEMP_DEFAULT;
+        gActiveExtremes.maxTemp = MAX_TEMP_DEFAULT;
     }
 }
 
@@ -60,8 +71,8 @@ bool configSaveUser(const ConfigBlock_t *newConfig) {
 
     // Program 64-bit blocks
     uint32_t *dataPtr = (uint32_t *)&gActiveConfig;
-    for (int i = 0; i < sizeof(ConfigBlock_t) / 8; i++) {
-        status = DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, CONFIG_BLOCK_ADDR + (i * 8), &dataPtr[i * 2]);
+    for (int i = 0; i < sizeof(ConfigBlock_t) / FLASH_BLOCK_SIZE_BYTES; i++) {
+        status = DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, CONFIG_BLOCK_ADDR + (i * FLASH_BLOCK_SIZE_BYTES), &dataPtr[i * FLASH_WORDS_PER_BLOCK]);
         if (status != DL_FLASHCTL_COMMAND_STATUS_PASSED) {
             return false;
         }

@@ -68,5 +68,5 @@ void adcInit()
         DL_ADC12_BURN_OUT_SOURCE_DISABLED, DL_ADC12_TRIGGER_MODE_AUTO_NEXT, DL_ADC12_WINDOWS_COMP_MODE_DISABLED);
     
     // Apply configuration from flash
-    adcReconfigure(gActiveConfig.filter_hw_adc);
+    adcReconfigure(gActiveConfig.filterHwAdc);
 }

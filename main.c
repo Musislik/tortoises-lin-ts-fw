@@ -8,11 +8,6 @@
 
 #include "ti_msp_dl_config.h"
 
-#include "adc.h"
-#include "config.h"
-#include "filter.h"
-#include "telemetry.h"
-
 // Defines for LIN
 #define LIN_RX_BUFFER_LEN 32
 #define LIN_TX_BUFFER_LEN 32
@@ -57,6 +52,11 @@ typedef enum {
     LIN_RX_STATE_RX_DATA = 4,
     LIN_RX_STATE_FAULT = 5
 } LinRxState_t;
+#include "adc.h"
+#include "config.h"
+#include "filter.h"
+#include "telemetry.h"
+
 // Variables for LIN TX/RX
 static volatile uint8_t txBuffer[LIN_TX_BUFFER_LEN] = {0};
 static volatile uint32_t txBufferIx = 0;
@@ -78,7 +78,7 @@ static volatile bool tick100msFlag = false;
 
 // Pending config save from ISR
 volatile bool gPendingConfigSave = false;
-volatile ConfigBlock_t gPendingConfig;
+ConfigBlock_t gPendingConfig;
 
 // Latest measured temperature available to LIN ISR
 volatile int16_t gLatestTemperature = 0;
@@ -291,13 +291,13 @@ void LIN_INST_IRQHandler(void) {
                         txBufferLen = LIN_TX_DATA_CONFIG_LEN;
 
                         DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
-                    } /* else if (rxByte == gActiveConfig.pidSetConfig) {
+                    } else if (rxByte == gActiveConfig.pidSetConfig) {
                         // We need to receive 13 bytes + checksum
                         sLinRxState = LIN_RX_STATE_RX_DATA;
                         rxBufferIx = 0;
                         expectedRxLen = LIN_RX_DATA_CONFIG_LEN; // 13 data + 1 cs
                         activeRxPid = rxByte;
-                    } */ else {
+                    } else {
                         // Unrecognized PID: effectively filters out irrelevant bus traffic targeting 
                         // other nodes by dropping back to IDLE until the next Break.
                         sLinRxState = LIN_RX_STATE_IDLE;

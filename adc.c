@@ -1,5 +1,18 @@
 #include "adc.h"
+#include <stdint.h>
+#include <stdbool.h>
 #include "config.h"
+
+#define ADC_HW_CONFIG_TIME_SHIFT   4
+#define ADC_HW_CONFIG_MASK         0x0F
+
+#define ADC_SAMPLE_TIME_32         32
+#define ADC_SAMPLE_TIME_64         64
+#define ADC_SAMPLE_TIME_128        128
+#define ADC_SAMPLE_TIME_256        256
+#define ADC_SAMPLE_TIME_512        512
+
+#define ADC_INIT_DELAY_CYCLES      1000
 
 static const DL_ADC12_ClockConfig gADC12_0ClockConfig = {
     .clockSel       = DL_ADC12_CLOCK_SYSOSC,
@@ -7,21 +20,20 @@ static const DL_ADC12_ClockConfig gADC12_0ClockConfig = {
     .freqRange      = DL_ADC12_CLOCK_FREQ_RANGE_20_TO_24,
 };
 
-void adcReconfigure(uint8_t hwConfig)
-{
+void adcReconfigure(uint8_t hwConfig) {
     DL_ADC12_disableConversions(ADC12_0_INST);
 
-    uint8_t sampleTimeBits = (hwConfig >> 4) & 0x0F;
-    uint8_t hwAvgBits = hwConfig & 0x0F;
+    uint8_t sampleTimeBits = (hwConfig >> ADC_HW_CONFIG_TIME_SHIFT) & ADC_HW_CONFIG_MASK;
+    uint8_t hwAvgBits = hwConfig & ADC_HW_CONFIG_MASK;
 
-    uint32_t sampleTime = 512;
+    uint32_t sampleTime = ADC_SAMPLE_TIME_512;
     switch (sampleTimeBits) {
-        case 0x0: sampleTime = 32; break;
-        case 0x1: sampleTime = 64; break;
-        case 0x2: sampleTime = 128; break;
-        case 0x3: sampleTime = 256; break;
-        case 0x4: sampleTime = 512; break;
-        default: sampleTime = 512; break;
+        case 0x0: sampleTime = ADC_SAMPLE_TIME_32; break;
+        case 0x1: sampleTime = ADC_SAMPLE_TIME_64; break;
+        case 0x2: sampleTime = ADC_SAMPLE_TIME_128; break;
+        case 0x3: sampleTime = ADC_SAMPLE_TIME_256; break;
+        case 0x4: sampleTime = ADC_SAMPLE_TIME_512; break;
+        default: sampleTime = ADC_SAMPLE_TIME_512; break;
     }
     DL_ADC12_setSampleTime0(ADC12_0_INST, sampleTime);
 
@@ -40,20 +52,17 @@ void adcReconfigure(uint8_t hwConfig)
 
     if (hwAvgBits == 0x0) {
         // Just set to 1 and disable averaging mode in configConversionMem if needed, but the API expects _DISABLED.
-        // Actually the enum for disabled might be DL_ADC12_HW_AVG_NUM_ACC_DISABLED, or 0.
-        // Let's use DL_ADC12_HW_AVG_NUM_ACC_DISABLED.
     }
     DL_ADC12_configHwAverage(ADC12_0_INST, hwAvgNum, hwAvgDiv);
 
     DL_ADC12_enableConversions(ADC12_0_INST);
 }
 
-void adcInit()
-{
+void adcInit(void) {
     DL_ADC12_reset(ADC12_0_INST);
     DL_ADC12_enablePower(ADC12_0_INST);
 
-    delay_cycles(1000);
+    delay_cycles(ADC_INIT_DELAY_CYCLES);
 
     // PIN MUX
     DL_GPIO_initPeripheralAnalogFunction(IOMUX_PINCM21);

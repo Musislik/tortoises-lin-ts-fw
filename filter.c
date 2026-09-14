@@ -43,7 +43,8 @@ void filterInit(void) {
 
 uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig) {
     if (swFilterConfig == FILTER_SW_MODE_PASSTHROUGH) {
-        // Passthrough
+        // Passthrough is primarily used for factory calibration or raw hardware diagnostics 
+        // where unadulterated ADC readings are strictly required.
         return rawAdc;
     }
     
@@ -62,6 +63,8 @@ uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig) {
         
         // EMA: y_n = y_{n-1} + alpha * (x_n - y_{n-1})
         // y_n = y_{n-1} + (x_n - y_{n-1}) >> shift
+        // Bitwise right-shift is used here as a highly optimized substitute for floating-point division 
+        // to calculate the alpha weighting on resource-constrained microcontrollers.
         
         int32_t diff = (int32_t)rawAdc - (int32_t)emaState;
         emaState = emaState + (diff >> shift);
@@ -86,6 +89,8 @@ uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig) {
     uint32_t sum = 0;
     uint8_t count = maFilled ? numSamples : maIndex;
     if (count == 0) {
+        // Strict safeguard against division-by-zero during the very first execution cycle 
+        // before the buffer has accumulated any elements.
         return rawAdc; // Edge case
     }
     
@@ -99,6 +104,8 @@ uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig) {
 int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, uint16_t gainSens) {
     int32_t voltageMv = ((int32_t)rawAdc * ADC_VREF_MV) / ADC_MAX_VAL;
     
+    // Fallback behavior: if flash values are marked as invalid (e.g. uncalibrated unit), 
+    // default offset and gain are used to allow the unit to still function decently.
     int32_t offsetEff = (offsetMv == OFFSET_MV_INVALID) ? TEMP_OFFSET_MV : (int32_t)offsetMv;
     int32_t sensEff = (gainSens == GAIN_SENS_INVALID) ? GAIN_SENS_DEFAULT_VAL : (int32_t)gainSens;
     

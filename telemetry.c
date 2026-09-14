@@ -41,7 +41,9 @@ void telemetryUpdate(int16_t newTemp) {
         settlingTimer = 0; // Reset settling timer
         needsCommit = true;
 
-        // Check if delta is significant enough to commit immediately
+        // Check if delta is significant enough to commit immediately.
+        // We bypass the settling timer for large temperature jumps to guarantee that severe thermal 
+        // events are permanently recorded in flash even if the device loses power abruptly right after.
         int16_t minDelta = gLastCommittedMinTemp - gCurrentMinTemp;
         int16_t maxDelta = gCurrentMaxTemp - gLastCommittedMaxTemp;
         
@@ -61,6 +63,8 @@ void telemetryUpdate(int16_t newTemp) {
 
 void telemetryTick(void) {
     if (needsCommit) {
+        // The settling timer acts as a debounce mechanism. Minor extreme changes are held 
+        // in RAM until the temperature stabilizes, preventing excessive flash erase cycles.
         settlingTimer++;
         if (settlingTimer >= SETTLING_TIME_SEC) {
             ExtremesBlock_t newExt;
@@ -71,7 +75,8 @@ void telemetryTick(void) {
                 gLastCommittedMaxTemp = gCurrentMaxTemp;
                 needsCommit = false;
             } else {
-                // If save fails, reset timer to try again soon (e.g. next second)
+                // If save fails (e.g. flash controller busy), we back off by 1 second 
+                // and try again, ensuring the extreme is eventually committed.
                 settlingTimer = SETTLING_TIME_SEC - 1;
             }
         }

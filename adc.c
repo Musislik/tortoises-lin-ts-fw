@@ -21,6 +21,8 @@ static const DL_ADC12_ClockConfig gADC12_0ClockConfig = {
 };
 
 void adcReconfigure(uint8_t hwConfig) {
+    // Hardware requirement: Conversions must be strictly disabled before altering timing or averaging 
+    // parameters to prevent unpredictable ADC behavior or corrupted samples in flight.
     DL_ADC12_disableConversions(ADC12_0_INST);
 
     uint8_t sampleTimeBits = (hwConfig >> ADC_HW_CONFIG_TIME_SHIFT) & ADC_HW_CONFIG_MASK;
@@ -33,6 +35,7 @@ void adcReconfigure(uint8_t hwConfig) {
         case 0x2: sampleTime = ADC_SAMPLE_TIME_128; break;
         case 0x3: sampleTime = ADC_SAMPLE_TIME_256; break;
         case 0x4: sampleTime = ADC_SAMPLE_TIME_512; break;
+        // Default acts as a safe fallback for invalid configurations, ensuring the ADC always operates.
         default: sampleTime = ADC_SAMPLE_TIME_512; break;
     }
     DL_ADC12_setSampleTime0(ADC12_0_INST, sampleTime);
@@ -62,6 +65,8 @@ void adcInit(void) {
     DL_ADC12_reset(ADC12_0_INST);
     DL_ADC12_enablePower(ADC12_0_INST);
 
+    // Necessary hardware settling time to allow internal analog reference and 
+    // circuitry to stabilize after power-up. Omitting this causes initial spikes.
     delay_cycles(ADC_INIT_DELAY_CYCLES);
 
     // PIN MUX

@@ -6,11 +6,19 @@
 
 /**
  * @brief Initialize the filter state.
+ *
+ * Resets the ring buffers and tracking variables. This must be called after 
+ * boot or whenever the filter configuration changes to prevent stale data 
+ * from corrupting the new filter output.
  */
 void filterInit(void);
 
 /**
  * @brief Process a raw ADC value through the configured software filter.
+ *
+ * Applies digital signal processing (Moving Average or EMA) to mitigate high-frequency 
+ * noise that slips past the hardware filter, yielding a more stable reading.
+ *
  * @param rawAdc The raw ADC reading.
  * @param swFilterConfig The software filter configuration mode.
  * @return The filtered ADC value.
@@ -19,6 +27,9 @@ uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig);
 
 /**
  * @brief Calculate the temperature in 0.1 deg C from a filtered ADC value.
+ *
+ * Performs a two-point calibration linear conversion based on stored flash parameters.
+ *
  * @param rawAdc The filtered ADC reading.
  * @param offsetMv The voltage offset at 0 degrees C.
  * @param gainSens The calibration gain sensitivity.

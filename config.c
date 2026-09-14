@@ -32,7 +32,8 @@ void configInit(void) {
     if (cb->magic == CONFIG_MAGIC) {
         memcpy(&gActiveConfig, cb, sizeof(ConfigBlock_t));
     } else {
-        // Load defaults
+        // Load defaults as a safeguard against uninitialized or corrupted flash memory.
+        // This ensures the device remains fully operational and doesn't brick itself on the first boot.
         gActiveConfig.magic = CONFIG_MAGIC;
         gActiveConfig.logicalNodeId = LOGICAL_NODE_ID_DEFAULT;
         gActiveConfig.offsetMv = OFFSET_MV_DEFAULT;
@@ -65,7 +66,9 @@ bool configSaveUser(const ConfigBlock_t *newConfig) {
         return false;
     }
 
-    // Copy to active config to apply immediately
+    // Copy to active config to apply immediately.
+    // We update the active RAM struct before programming flash so that the system immediately 
+    // uses the new parameters (e.g. LIN PIDs) even while the slower flash write operation is ongoing.
     memcpy(&gActiveConfig, newConfig, sizeof(ConfigBlock_t));
     gActiveConfig.magic = CONFIG_MAGIC; // Ensure magic is right
 

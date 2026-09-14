@@ -159,6 +159,8 @@ int main(void) {
 
     while (1) {
         if (gPendingConfigSave) {
+            // Flash writes are deferred to the main loop because executing them inside the ISR 
+            // would block the CPU for too long, potentially causing LIN RX overruns or missing ADC events.
             __disable_irq();
             ConfigBlock_t newCfg = gPendingConfig;
             gPendingConfigSave = false;
@@ -201,7 +203,9 @@ int main(void) {
             telemetryTick();
         }
 
-        // Sleep safely (wake up on any interrupt)
+        // Sleep safely (wake up on any interrupt).
+        // This puts the CPU into a low-power state, significantly reducing power consumption 
+        // while idling between ADC conversions or LIN bus activity.
         __WFI();
     }
 }
@@ -211,6 +215,8 @@ void LIN_INST_IRQHandler(void) {
 
     // Break detection
     if ((pendingFlags & DL_UART_INTERRUPT_LINC0_MATCH) == DL_UART_INTERRUPT_LINC0_MATCH) {
+        // A break field signals the start of a new LIN frame. We unconditionally reset the 
+        // state machine to resynchronize, discarding any incomplete/corrupted previous frames.
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
         sLinRxState = LIN_RX_STATE_AWAITING;
         return;
@@ -241,7 +247,10 @@ void LIN_INST_IRQHandler(void) {
                     if (rxByte == gActiveConfig.pidGetTemp) {
                         sLinRxState = LIN_RX_STATE_IDLE;
 
-                        // Fast reply using latest prepared temp
+                        // Fast reply using latest prepared temp.
+                        // By caching the ADC result in the main loop and using it here, we decouple 
+                        // the communication layer from the slow ADC sampling process, guaranteeing 
+                        // an immediate response within the tight LIN timing constraints.
                         int16_t temp = gLatestTemperature;
 
                         // Little-endian
@@ -291,6 +300,8 @@ void LIN_INST_IRQHandler(void) {
                         expectedRxLen = LIN_RX_DATA_CONFIG_LEN; // 13 data + 1 cs
                         activeRxPid = rxByte;
                     } else {
+                        // Unrecognized PID: effectively filters out irrelevant bus traffic targeting 
+                        // other nodes by dropping back to IDLE until the next Break.
                         sLinRxState = LIN_RX_STATE_IDLE;
                     }
                     break;

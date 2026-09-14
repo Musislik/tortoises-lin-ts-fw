@@ -20,7 +20,12 @@ void telemetryUpdate(int16_t newTemp);
 
 /**
  * @brief Periodic tick function for telemetry processing.
- *        Called every second to handle delayed flash writes.
+ *
+ * This function handles delayed (debounced) flash writes. Batching the updates 
+ * and waiting for the extremes to settle significantly reduces flash wear, 
+ * prolonging the lifespan of the memory sector compared to writing on every change.
+ *
+ * @note Must be called periodically (e.g., every second).
  */
 void telemetryTick(void);
 

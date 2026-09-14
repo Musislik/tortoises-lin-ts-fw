@@ -59,11 +59,16 @@ extern ExtremesBlock_t gActiveExtremes;
 
 /**
  * @brief Initializes the configuration blocks from flash.
+ *
+ * This routine verifies the integrity of the distinct flash blocks (Factory, Config, 
+ * Extremes) using magic numbers. Separation into distinct blocks prevents corruption 
+ * of extremes or factory data during user configuration updates, and minimizes flash wear.
  */
 void configInit(void);
 
 /**
  * @brief Saves the user configuration block to flash.
+ *
  * @param newConfig Pointer to the new configuration data.
  * @return true if successful, false otherwise.
  */
@@ -71,6 +76,10 @@ bool configSaveUser(const ConfigBlock_t *newConfig);
 
 /**
  * @brief Saves the extremes block to flash.
+ *
+ * Extremes are stored in a separate flash sector to isolate frequent writes from 
+ * the static user configuration, reducing wear on the config sector.
+ *
  * @param newExtremes Pointer to the new extremes data.
  * @return true if successful, false otherwise.
  */

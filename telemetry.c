@@ -1,4 +1,6 @@
 #include "telemetry.h"
+#include <stdint.h>
+#include <stdbool.h>
 #include "config.h"
 
 #define EXTREME_SIGNIFICANT_DELTA_X10 50 // 5.0 deg C
@@ -48,11 +50,11 @@ void telemetryUpdate(int16_t newTemp) {
             ExtremesBlock_t newExt;
             newExt.minTemp = gCurrentMinTemp;
             newExt.maxTemp = gCurrentMaxTemp;
-            configSaveExtremes(&newExt);
-            
-            gLastCommittedMinTemp = gCurrentMinTemp;
-            gLastCommittedMaxTemp = gCurrentMaxTemp;
-            needsCommit = false;
+            if (configSaveExtremes(&newExt)) {
+                gLastCommittedMinTemp = gCurrentMinTemp;
+                gLastCommittedMaxTemp = gCurrentMaxTemp;
+                needsCommit = false;
+            }
         }
     }
 }
@@ -64,11 +66,14 @@ void telemetryTick(void) {
             ExtremesBlock_t newExt;
             newExt.minTemp = gCurrentMinTemp;
             newExt.maxTemp = gCurrentMaxTemp;
-            configSaveExtremes(&newExt);
-            
-            gLastCommittedMinTemp = gCurrentMinTemp;
-            gLastCommittedMaxTemp = gCurrentMaxTemp;
-            needsCommit = false;
+            if (configSaveExtremes(&newExt)) {
+                gLastCommittedMinTemp = gCurrentMinTemp;
+                gLastCommittedMaxTemp = gCurrentMaxTemp;
+                needsCommit = false;
+            } else {
+                // If save fails, reset timer to try again soon (e.g. next second)
+                settlingTimer = SETTLING_TIME_SEC - 1;
+            }
         }
     }
 }

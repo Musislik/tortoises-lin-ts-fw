@@ -1,86 +1,108 @@
 #include "filter.h"
-
+#include <stdint.h>
+#include <stdbool.h>
 
 #define ADC_VREF_MV 3300
 #define ADC_MAX_VAL 4095
 #define TEMP_OFFSET_MV 500
 
+#define FILTER_SW_MODE_PASSTHROUGH 0x00
+#define FILTER_SW_MODE_MA_4        0x01
+#define FILTER_SW_MODE_MA_8        0x02
+#define FILTER_SW_MODE_MA_16       0x03
+#define FILTER_SW_MODE_EMA_1       0x04
+#define FILTER_SW_MODE_EMA_3       0x06
+
+#define MA_SAMPLES_4  4
+#define MA_SAMPLES_8  8
+#define MA_SAMPLES_16 16
+
+#define OFFSET_MV_INVALID      0xFFFF
+#define GAIN_SENS_INVALID      0
+#define GAIN_SENS_DEFAULT_VAL  100
+#define TEMP_MULTIPLIER        100
+
 // Ring buffer for moving average (up to 16 samples)
 #define MAX_MA_SAMPLES 16
-static uint32_t ma_buffer[MAX_MA_SAMPLES];
-static uint8_t ma_index = 0;
-static bool ma_filled = false;
+static uint32_t maBuffer[MAX_MA_SAMPLES];
+static uint8_t maIndex = 0;
+static bool maFilled = false;
 
 // State for EMA
-static uint32_t ema_state = 0;
-static bool ema_initialized = false;
+static uint32_t emaState = 0;
+static bool emaInitialized = false;
 
 void filterInit(void) {
-    ma_index = 0;
-    ma_filled = false;
-    ema_initialized = false;
+    maIndex = 0;
+    maFilled = false;
+    emaInitialized = false;
     for (int i = 0; i < MAX_MA_SAMPLES; i++) {
-        ma_buffer[i] = 0;
+        maBuffer[i] = 0;
     }
 }
 
-uint32_t filterProcess(uint32_t raw_adc, uint8_t sw_filter_config) {
-    if (sw_filter_config == 0x00) {
+uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig) {
+    if (swFilterConfig == FILTER_SW_MODE_PASSTHROUGH) {
         // Passthrough
-        return raw_adc;
+        return rawAdc;
     }
     
     // EMA Modes
-    if (sw_filter_config >= 0x04 && sw_filter_config <= 0x06) {
-        if (!ema_initialized) {
-            ema_state = raw_adc;
-            ema_initialized = true;
-            return ema_state;
+    if ((swFilterConfig >= FILTER_SW_MODE_EMA_1) && (swFilterConfig <= FILTER_SW_MODE_EMA_3)) {
+        if (!emaInitialized) {
+            emaState = rawAdc;
+            emaInitialized = true;
+            return emaState;
         }
         
-        // sw_filter_config == 0x04 -> alpha = 0.5 (shift 1)
-        // sw_filter_config == 0x05 -> alpha = 0.25 (shift 2)
-        // sw_filter_config == 0x06 -> alpha = 0.125 (shift 3)
-        uint8_t shift = (sw_filter_config - 0x03); 
+        // swFilterConfig == 0x04 -> alpha = 0.5 (shift 1)
+        // swFilterConfig == 0x05 -> alpha = 0.25 (shift 2)
+        // swFilterConfig == 0x06 -> alpha = 0.125 (shift 3)
+        uint8_t shift = (swFilterConfig - FILTER_SW_MODE_MA_16); 
         
         // EMA: y_n = y_{n-1} + alpha * (x_n - y_{n-1})
         // y_n = y_{n-1} + (x_n - y_{n-1}) >> shift
         
-        int32_t diff = (int32_t)raw_adc - (int32_t)ema_state;
-        ema_state = ema_state + (diff >> shift);
-        return ema_state;
+        int32_t diff = (int32_t)rawAdc - (int32_t)emaState;
+        emaState = emaState + (diff >> shift);
+        return emaState;
     }
     
     // Moving Average Modes (0x01: 4, 0x02: 8, 0x03: 16)
-    uint8_t num_samples = 4;
-    if (sw_filter_config == 0x02) num_samples = 8;
-    else if (sw_filter_config == 0x03) num_samples = 16;
+    uint8_t numSamples = MA_SAMPLES_4;
+    if (swFilterConfig == FILTER_SW_MODE_MA_8) {
+        numSamples = MA_SAMPLES_8;
+    } else if (swFilterConfig == FILTER_SW_MODE_MA_16) {
+        numSamples = MA_SAMPLES_16;
+    }
     
-    ma_buffer[ma_index] = raw_adc;
-    ma_index++;
-    if (ma_index >= num_samples) {
-        ma_index = 0;
-        ma_filled = true;
+    maBuffer[maIndex] = rawAdc;
+    maIndex++;
+    if (maIndex >= numSamples) {
+        maIndex = 0;
+        maFilled = true;
     }
     
     uint32_t sum = 0;
-    uint8_t count = ma_filled ? num_samples : ma_index;
-    if (count == 0) return raw_adc; // Edge case
+    uint8_t count = maFilled ? numSamples : maIndex;
+    if (count == 0) {
+        return rawAdc; // Edge case
+    }
     
     for (uint8_t i = 0; i < count; i++) {
-        sum += ma_buffer[i];
+        sum += maBuffer[i];
     }
     
     return sum / count;
 }
 
-int32_t calcTemperature(uint32_t raw_adc, uint16_t offset_mV, uint16_t gain_sens) {
-    int32_t voltage_mV = ((int32_t)raw_adc * ADC_VREF_MV) / ADC_MAX_VAL;
+int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, uint16_t gainSens) {
+    int32_t voltageMv = ((int32_t)rawAdc * ADC_VREF_MV) / ADC_MAX_VAL;
     
-    int32_t offset_eff = (offset_mV == 0xFFFF) ? 500 : (int32_t)offset_mV;
-    int32_t sens_eff = (gain_sens == 0) ? 100 : (int32_t)gain_sens;
+    int32_t offsetEff = (offsetMv == OFFSET_MV_INVALID) ? TEMP_OFFSET_MV : (int32_t)offsetMv;
+    int32_t sensEff = (gainSens == GAIN_SENS_INVALID) ? GAIN_SENS_DEFAULT_VAL : (int32_t)gainSens;
     
-    int32_t temp_C_x10 = ((voltage_mV - offset_eff) * 100) / sens_eff;
+    int32_t tempCx10 = ((voltageMv - offsetEff) * TEMP_MULTIPLIER) / sensEff;
     
-    return temp_C_x10;
+    return tempCx10;
 }

@@ -28,10 +28,10 @@ void configInit(void) {
     }
 
     // Check Config block
-    ConfigBlock_t *cb = (ConfigBlock_t *)CONFIG_BLOCK_ADDR;
-    if (cb->magic == CONFIG_MAGIC) {
-        memcpy(&gActiveConfig, cb, sizeof(ConfigBlock_t));
-    } else {
+    // ConfigBlock_t *cb = (ConfigBlock_t *)CONFIG_BLOCK_ADDR;
+    // if (cb->magic == CONFIG_MAGIC) {
+    //     memcpy(&gActiveConfig, cb, sizeof(ConfigBlock_t));
+    // } else {
         // Load defaults as a safeguard against uninitialized or corrupted flash memory.
         // This ensures the device remains fully operational and doesn't brick itself on the first boot.
         gActiveConfig.magic = CONFIG_MAGIC;
@@ -44,20 +44,23 @@ void configInit(void) {
         gActiveConfig.filterHwAdc = FILTER_HW_ADC_DEFAULT;
         gActiveConfig.filterSwMode = FILTER_SW_MODE_DEFAULT;
         memset(gActiveConfig._padding, 0xFF, sizeof(gActiveConfig._padding));
-    }
+    // }
 
     // Check Extremes block
+    /*
     ExtremesBlock_t *eb = (ExtremesBlock_t *)EXTREMES_BLOCK_ADDR;
     if (eb->magic == EXTREMES_MAGIC) {
         memcpy(&gActiveExtremes, eb, sizeof(ExtremesBlock_t));
     } else {
+    */
         gActiveExtremes.magic = EXTREMES_MAGIC;
         gActiveExtremes.minTemp = MIN_TEMP_DEFAULT;
         gActiveExtremes.maxTemp = MAX_TEMP_DEFAULT;
-    }
+    // }
 }
 
 bool configSaveUser(const ConfigBlock_t *newConfig) {
+    /*
     DL_FlashCTL_executeClearStatus(FLASHCTL);
     DL_FlashCTL_unprotectSector(FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
 
@@ -65,6 +68,7 @@ bool configSaveUser(const ConfigBlock_t *newConfig) {
     if (status != DL_FLASHCTL_COMMAND_STATUS_PASSED) {
         return false;
     }
+    */
 
     // Copy to active config to apply immediately.
     // We update the active RAM struct before programming flash so that the system immediately 
@@ -72,6 +76,7 @@ bool configSaveUser(const ConfigBlock_t *newConfig) {
     memcpy(&gActiveConfig, newConfig, sizeof(ConfigBlock_t));
     gActiveConfig.magic = CONFIG_MAGIC; // Ensure magic is right
 
+    /*
     // Program 64-bit blocks
     uint32_t *dataPtr = (uint32_t *)&gActiveConfig;
     for (int i = 0; i < sizeof(ConfigBlock_t) / FLASH_BLOCK_SIZE_BYTES; i++) {
@@ -81,10 +86,12 @@ bool configSaveUser(const ConfigBlock_t *newConfig) {
         }
     }
     DL_FlashCTL_executeClearStatus(FLASHCTL);
+    */
     return true;
 }
 
 bool configSaveExtremes(const ExtremesBlock_t *newExtremes) {
+    /*
     DL_FlashCTL_executeClearStatus(FLASHCTL);
     DL_FlashCTL_unprotectSector(FLASHCTL, EXTREMES_BLOCK_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
 
@@ -92,12 +99,16 @@ bool configSaveExtremes(const ExtremesBlock_t *newExtremes) {
     if (status != DL_FLASHCTL_COMMAND_STATUS_PASSED) {
         return false;
     }
+    */
 
     memcpy(&gActiveExtremes, newExtremes, sizeof(ExtremesBlock_t));
     gActiveExtremes.magic = EXTREMES_MAGIC;
 
+    /*
     uint32_t *dataPtr = (uint32_t *)&gActiveExtremes;
     status = DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, EXTREMES_BLOCK_ADDR, dataPtr);
     
     return status == DL_FLASHCTL_COMMAND_STATUS_PASSED;
+    */
+    return true;
 }

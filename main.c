@@ -74,9 +74,11 @@ static volatile LinRxState_t sLinRxState = LIN_RX_STATE_INIT;
 // TIMER for telemetry and ADC timing
 static volatile uint32_t timer1msCounter = 0;
 static volatile uint32_t timer1sCounter = 0;
-static volatile uint32_t timer100msCounter = 0;
+static volatile uint32_t timerAdcCounter = 0;
 static volatile bool gFlagTimer1s = false;
-static volatile bool gFlagTimer100ms = false;
+static volatile bool gFlagStartAdc = false;
+static volatile bool gFlagAdcReady = false;
+static volatile uint32_t gRawAdc = 0;
 
 // Pending config save from ISR
 volatile bool gPendingConfigSave = false;
@@ -90,7 +92,7 @@ void TIMER_SYS_INST_IRQHandler(void) {
         case DL_TIMER_IIDX_ZERO:
             timer1msCounter++;
             timer1sCounter++;
-            timer100msCounter++;
+            timerAdcCounter++;
             dbg = true;
 
             if (timer1sCounter >= TIMER_1S_MS) {
@@ -98,9 +100,9 @@ void TIMER_SYS_INST_IRQHandler(void) {
                 gFlagTimer1s = true;
             }
 
-            if (timer100msCounter >= TIMER_100MS_MS) {
-                timer100msCounter = 0;
-                gFlagTimer100ms = true;
+            if (timerAdcCounter >= TIMER_100MS_MS) {
+                timerAdcCounter = 0;
+                gFlagStartAdc = true;
             }
             break;
         default:
@@ -174,6 +176,10 @@ static void initHardware(void) {
     // Enable Sys Timer Interrupt
     NVIC_ClearPendingIRQ(TIMER_SYS_INST_INT_IRQN);
     NVIC_EnableIRQ(TIMER_SYS_INST_INT_IRQN);
+    
+    // Enable ADC Interrupt
+    NVIC_ClearPendingIRQ(ADC12_0_INST_INT_IRQN);
+    NVIC_EnableIRQ(ADC12_0_INST_INT_IRQN);
 
     LIN_resetRX(LIN_RX_STATE_IDLE);
 
@@ -182,11 +188,22 @@ static void initHardware(void) {
     delay_cycles(DELAY_STANDARD_CYCLES);
 }
 
+void ADC12_0_INST_IRQHandler(void) {
+    switch (DL_ADC12_getPendingInterrupt(ADC12_0_INST)) {
+        case DL_ADC12_IIDX_MEM0_RESULT_LOADED:
+            gRawAdc = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
+            gFlagAdcReady = true;
+            break;
+        default:
+            break;
+    }
+}
+
 int main(void) {
     initHardware();
 
-    // Start first conversion
-    DL_ADC12_startConversion(ADC12_0_INST);
+    // Trigger initial conversion
+    gFlagStartAdc = true;
 
     while (1) {
         if (gPendingConfigSave) {
@@ -204,17 +221,21 @@ int main(void) {
                 filterInit(); // Reset software filter
             }
             
-            // Start a new conversion after reconfiguring ADC
+            // Trigger a conversion after reconfiguring ADC
+            gFlagStartAdc = true;
+        }
+
+        if (gFlagStartAdc) {
+            gFlagStartAdc = false;
+            
+            DL_ADC12_enableConversions(ADC12_0_INST);
             DL_ADC12_startConversion(ADC12_0_INST);
         }
 
-        if (gFlagTimer100ms) {
-            gFlagTimer100ms = false;
+        if (gFlagAdcReady) {
+            gFlagAdcReady = false;
             
-            // Read ADC result of the previous 100ms cycle
-            uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
-            
-            uint32_t filteredAdc = filterProcess(adcTempVal, gActiveConfig.filterSwMode);
+            uint32_t filteredAdc = filterProcess(gRawAdc, gActiveConfig.filterSwMode);
             int32_t temp = calcTemperature(filteredAdc, gActiveConfig.offsetMv, gActiveConfig.gainSens);
             
             // Atomic update of global temp for LIN ISR
@@ -224,9 +245,6 @@ int main(void) {
 
             // Run telemetry (will safely write Flash if needed)
             telemetryUpdate((int16_t)temp);
-
-            // Start next ADC conversion for the next 100ms cycle
-            DL_ADC12_startConversion(ADC12_0_INST);
         }
 
         if (gFlagTimer1s) {

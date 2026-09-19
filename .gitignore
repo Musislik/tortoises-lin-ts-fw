@@ -6,3 +6,13 @@ Debug
 targetConfigs
 trash
 build*
+.claude/ccs.settings.md
+.claude/skills/ti-ccstudio-clang-code-coverage/SKILL.md
+.claude/skills/ti-ccstudio-clang-code-coverage/scripts/manage_cproject_coverage.js
+.claude/skills/ti-ccstudio-clang-code-coverage/scripts/patch_coverage_report.js
+.claude/skills/ti-ccstudio-clang-code-coverage/scripts/write_cnt.js
+.mcp.json
+.zed/settings.json
+CLAUDE.md
+GEMINI.md
+docs/ai_agent_guide.md

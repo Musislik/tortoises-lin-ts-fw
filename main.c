@@ -378,6 +378,7 @@ void LIN_INST_IRQHandler(void) {
             } else {
                 DL_UART_disableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
                 LIN_resetRX(LIN_RX_STATE_IDLE);
+                txBufferLen = 0;
             }
             break;
         }

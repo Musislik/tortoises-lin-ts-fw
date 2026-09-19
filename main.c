@@ -258,9 +258,10 @@ void LIN_INST_IRQHandler(void) {
                         txBuffer[1] = (uint8_t)((temp >> 8) & 0xFF);
                         txBuffer[2] = calcChecksum(rxByte, txBuffer, 2);
 
-                        txBufferIx = 0;
+                        txBufferIx = 1;
                         txBufferLen = LIN_TX_DATA_TEMP_LEN;
 
+                        DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                         DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
                     } else if (rxByte == gActiveConfig.pidGetConfig) {
                         sLinRxState = LIN_RX_STATE_IDLE;
@@ -287,9 +288,10 @@ void LIN_INST_IRQHandler(void) {
                         
                         txBuffer[17] = calcChecksum(rxByte, txBuffer, 17);
                         
-                        txBufferIx = 0;
+                        txBufferIx = 1;
                         txBufferLen = LIN_TX_DATA_CONFIG_LEN;
-
+                        
+                        DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                         DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
                     } else if (rxByte == gActiveConfig.pidSetConfig) {
                         // We need to receive 13 bytes + checksum
@@ -337,8 +339,7 @@ void LIN_INST_IRQHandler(void) {
         }
         case DL_UART_EXTEND_IIDX_TX: {
             if (txBufferIx < txBufferLen) {
-                DL_UART_Extend_transmitData(LIN_INST, txBuffer[txBufferIx]);
-                txBufferIx++;
+                DL_UART_Extend_transmitData(LIN_INST, txBuffer[txBufferIx++]);
             } else {
                 DL_UART_disableInterrupt(LIN_INST, DL_UART_EXTEND_IIDX_TX);
             }

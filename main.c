@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "ti/driverlib/dl_uart_extend.h"
 #include "ti_msp_dl_config.h"

@@ -112,11 +112,30 @@ static uint8_t calcChecksum(uint8_t pid, const volatile uint8_t *buffer, uint8_t
     return (uint8_t)(~sum);
 }
 
+static void LIN_resetRX(LinRxState_t newState) {
+    while (!DL_UART_isRXFIFOEmpty(LIN_INST)) {
+        DL_UART_Extend_receiveData(LIN_INST);
+    }
+
+    DL_UART_Extend_clearInterruptStatus(LIN_INST, 
+        DL_UART_EXTEND_INTERRUPT_RX | 
+        DL_UART_EXTEND_INTERRUPT_OVERRUN_ERROR | 
+        DL_UART_EXTEND_INTERRUPT_FRAMING_ERROR | 
+        DL_UART_EXTEND_INTERRUPT_RX_TIMEOUT_ERROR | 
+        DL_UART_EXTEND_INTERRUPT_PARITY_ERROR);
+
+    rxBufferIx = 0;
+    expectedRxLen = 0;
+    activeRxPid = 0;
+    sLinRxState = newState;
+}
+
 static void initHardware(void) {
     SYSCFG_DL_init();
-    delay_cycles(DELAY_SWD_CYCLES); // 10s delay for SWD
+    
+    delay_cycles(DELAY_SWD_CYCLES/2); // 10s delay for SWD
     delay_cycles(DELAY_STANDARD_CYCLES);
-
+    /*
     // Init GPIO - LIN enable pin
     DL_GPIO_initDigitalOutput(IOMUX_PINCM20);
     DL_GPIO_clearPins(GPIOA, DL_GPIO_PIN_19);
@@ -124,7 +143,7 @@ static void initHardware(void) {
     DL_GPIO_setPins(GPIOA, DL_GPIO_PIN_19); // Enable LIN transceiver
 
     delay_cycles(DELAY_STANDARD_CYCLES);
-
+    */
     configInit();
     filterInit();
     telemetryInit();
@@ -146,6 +165,8 @@ static void initHardware(void) {
     
     // Setup SysTick for 1ms
     SysTick_Config(CPUCLK_FREQ / SYSTICK_1S_MS);
+
+    LIN_resetRX(LIN_RX_STATE_IDLE);
 
     __enable_irq();
 
@@ -212,14 +233,14 @@ int main(void) {
 }
 
 void LIN_INST_IRQHandler(void) {
-    uint32_t pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH | DL_UART_INTERRUPT_RX);
+    uint32_t pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
 
     // Break detection
     if ((pendingFlags & DL_UART_INTERRUPT_LINC0_MATCH) == DL_UART_INTERRUPT_LINC0_MATCH) {
         // A break field signals the start of a new LIN frame. We unconditionally reset the 
         // state machine to resynchronize, discarding any incomplete/corrupted previous frames.
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
-        sLinRxState = LIN_RX_STATE_AWAITING;
+        LIN_resetRX(LIN_RX_STATE_AWAITING);
         return;
     }
 
@@ -229,7 +250,7 @@ void LIN_INST_IRQHandler(void) {
     if ((pendingFlags & DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) == DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW);
         DL_UART_Extend_setLINCounterValue(LIN_INST, 0);
-        sLinRxState = LIN_RX_STATE_IDLE;
+        LIN_resetRX(LIN_RX_STATE_IDLE);
         return;
     }
 
@@ -344,31 +365,20 @@ void LIN_INST_IRQHandler(void) {
                 txBufferIx++;
             } else {
                 DL_UART_disableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
+                LIN_resetRX(LIN_RX_STATE_IDLE);
             }
             break;
         }
-        case DL_UART_EXTEND_IIDX_FRAMING_ERROR: {
-            DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_MAIN_INTERRUPT_FRAMING_ERROR);
-            DL_UART_Extend_receiveData(LIN_INST); // Clear data
-            break;
-        }
-        case DL_UART_EXTEND_IIDX_OVERRUN_ERROR: {
-            DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_MAIN_INTERRUPT_OVERRUN_ERROR);
-            DL_UART_Extend_receiveData(LIN_INST); // Clear data
-            break;
-        }
-        case DL_UART_EXTEND_IIDX_BREAK_ERROR: {
-            DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_MAIN_INTERRUPT_BREAK_ERROR);
-            break;
-        }
-        case DL_UART_EXTEND_INTERRUPT_RX_TIMEOUT_ERROR: {
-            DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_EXTEND_INTERRUPT_RX_TIMEOUT_ERROR);
+        case DL_UART_EXTEND_IIDX_OVERRUN_ERROR:
+        case DL_UART_EXTEND_IIDX_FRAMING_ERROR:
+        case DL_UART_EXTEND_IIDX_RX_TIMEOUT_ERROR:
+        case DL_UART_EXTEND_IIDX_PARITY_ERROR: {
+            LIN_resetRX(LIN_RX_STATE_IDLE);
             break;
         }
         default: {
-            DL_UART_Extend_receiveData(LIN_INST); // Clear unused data
+            uint32_t pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
             // TODO: implement error status in config or something to report LIN master unrecognized IRQ!
-            // TODO: clear interrupt status
             break;
         }
     }

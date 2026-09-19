@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "ti/driverlib/dl_uart_extend.h"
 #include "ti_msp_dl_config.h"
 
 // Defines for LIN
@@ -227,6 +228,8 @@ void LIN_INST_IRQHandler(void) {
     // LIN counter overflow
     if ((pendingFlags & DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) == DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW) {
         DL_UART_Extend_clearInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LIN_COUNTER_OVERFLOW);
+        DL_UART_Extend_setLINCounterValue(LIN_INST, 0);
+        sLinRxState = LIN_RX_STATE_IDLE;
         return;
     }
 
@@ -341,7 +344,7 @@ void LIN_INST_IRQHandler(void) {
             if (txBufferIx < txBufferLen) {
                 DL_UART_Extend_transmitData(LIN_INST, txBuffer[txBufferIx++]);
             } else {
-                DL_UART_disableInterrupt(LIN_INST, DL_UART_EXTEND_IIDX_TX);
+                DL_UART_disableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
             }
             break;
         }
@@ -365,6 +368,8 @@ void LIN_INST_IRQHandler(void) {
         }
         default: {
             DL_UART_Extend_receiveData(LIN_INST); // Clear unused data
+            // TODO: implement error status in config or something to report LIN master unrecognized IRQ!
+            // TODO: clear interrupt status
             break;
         }
     }

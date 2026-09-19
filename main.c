@@ -22,9 +22,9 @@
 #define DELAY_STANDARD_CYCLES       240000
 
 #define LIN_TX_DATA_TEMP_LEN        3
-#define LIN_TX_DATA_CONFIG_LEN      18
-#define LIN_RX_DATA_CONFIG_LEN      14
-#define LIN_RX_CONFIG_PAYLOAD_LEN   13
+#define LIN_TX_DATA_CONFIG_LEN      20
+#define LIN_RX_DATA_CONFIG_LEN      16
+#define LIN_RX_CONFIG_PAYLOAD_LEN   15
 
 /**
  * @brief Checks if LIN is in a state expecting data.
@@ -289,27 +289,33 @@ void LIN_INST_IRQHandler(void) {
                     } else if (rxByte == gActiveConfig.pidGetConfig) {
                         sLinRxState = LIN_RX_STATE_IDLE;
                         
-                        // Populate 13 bytes
+                        // Populate 15 bytes of config + 4 bytes of factory SN
                         txBuffer[0] = (uint8_t)(gActiveConfig.logicalNodeId & 0xFF);
                         txBuffer[1] = (uint8_t)((gActiveConfig.logicalNodeId >> 8) & 0xFF);
                         txBuffer[2] = (uint8_t)((gActiveConfig.logicalNodeId >> 16) & 0xFF);
                         txBuffer[3] = (uint8_t)((gActiveConfig.logicalNodeId >> 24) & 0xFF);
                         txBuffer[4] = (uint8_t)(gActiveConfig.offsetMv & 0xFF);
                         txBuffer[5] = (uint8_t)((gActiveConfig.offsetMv >> 8) & 0xFF);
-                        txBuffer[6] = (uint8_t)(gActiveConfig.gainSens & 0xFF);
-                        txBuffer[7] = (uint8_t)((gActiveConfig.gainSens >> 8) & 0xFF);
-                        txBuffer[8] = gActiveConfig.pidGetTemp;
-                        txBuffer[9] = gActiveConfig.pidGetConfig;
-                        txBuffer[10] = gActiveConfig.pidSetConfig;
-                        txBuffer[11] = gActiveConfig.filterHwAdc;
-                        txBuffer[12] = gActiveConfig.filterSwMode;
                         
-                        txBuffer[13] = (uint8_t)(gActiveFactory.factorySn & 0xFF);
-                        txBuffer[14] = (uint8_t)((gActiveFactory.factorySn >> 8) & 0xFF);
-                        txBuffer[15] = (uint8_t)((gActiveFactory.factorySn >> 16) & 0xFF);
-                        txBuffer[16] = (uint8_t)((gActiveFactory.factorySn >> 24) & 0xFF);
+                        uint32_t gainBits;
+                        memcpy(&gainBits, &gActiveConfig.gainSens, sizeof(gainBits));
+                        txBuffer[6] = (uint8_t)(gainBits & 0xFF);
+                        txBuffer[7] = (uint8_t)((gainBits >> 8) & 0xFF);
+                        txBuffer[8] = (uint8_t)((gainBits >> 16) & 0xFF);
+                        txBuffer[9] = (uint8_t)((gainBits >> 24) & 0xFF);
                         
-                        txBuffer[17] = calcChecksum(rxByte, txBuffer, 17);
+                        txBuffer[10] = gActiveConfig.pidGetTemp;
+                        txBuffer[11] = gActiveConfig.pidGetConfig;
+                        txBuffer[12] = gActiveConfig.pidSetConfig;
+                        txBuffer[13] = gActiveConfig.filterHwAdc;
+                        txBuffer[14] = gActiveConfig.filterSwMode;
+                        
+                        txBuffer[15] = (uint8_t)(gActiveFactory.factorySn & 0xFF);
+                        txBuffer[16] = (uint8_t)((gActiveFactory.factorySn >> 8) & 0xFF);
+                        txBuffer[17] = (uint8_t)((gActiveFactory.factorySn >> 16) & 0xFF);
+                        txBuffer[18] = (uint8_t)((gActiveFactory.factorySn >> 24) & 0xFF);
+                        
+                        txBuffer[19] = calcChecksum(rxByte, txBuffer, 19);
                         
                         txBufferIx = 0;
                         txBufferLen = LIN_TX_DATA_CONFIG_LEN;
@@ -340,12 +346,15 @@ void LIN_INST_IRQHandler(void) {
                             ConfigBlock_t newConfig = gActiveConfig;
                             newConfig.logicalNodeId = ((uint32_t)rxBuffer[3] << 24) | ((uint32_t)rxBuffer[2] << 16) | ((uint32_t)rxBuffer[1] << 8) | rxBuffer[0];
                             newConfig.offsetMv = ((uint16_t)rxBuffer[5] << 8) | rxBuffer[4];
-                            newConfig.gainSens = ((uint16_t)rxBuffer[7] << 8) | rxBuffer[6];
-                            newConfig.pidGetTemp = rxBuffer[8];
-                            newConfig.pidGetConfig = rxBuffer[9];
-                            newConfig.pidSetConfig = rxBuffer[10];
-                            newConfig.filterHwAdc = rxBuffer[11];
-                            newConfig.filterSwMode = rxBuffer[12];
+                            
+                            uint32_t gainBits = ((uint32_t)rxBuffer[9] << 24) | ((uint32_t)rxBuffer[8] << 16) | ((uint32_t)rxBuffer[7] << 8) | rxBuffer[6];
+                            memcpy(&newConfig.gainSens, &gainBits, sizeof(newConfig.gainSens));
+                            
+                            newConfig.pidGetTemp = rxBuffer[10];
+                            newConfig.pidGetConfig = rxBuffer[11];
+                            newConfig.pidSetConfig = rxBuffer[12];
+                            newConfig.filterHwAdc = rxBuffer[13];
+                            newConfig.filterSwMode = rxBuffer[14];
                             
                             // Signal main loop to save to flash
                             gPendingConfig = newConfig;

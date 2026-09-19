@@ -17,9 +17,6 @@
 #define MA_SAMPLES_8  8
 #define MA_SAMPLES_16 16
 
-#define OFFSET_MV_INVALID      0xFFFF
-#define GAIN_SENS_INVALID      0
-#define GAIN_SENS_DEFAULT_VAL  100
 #define TEMP_MULTIPLIER        100
 
 // Ring buffer for moving average (up to 16 samples)

@@ -35,6 +35,6 @@ uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig);
  * @param gainSens The calibration gain sensitivity.
  * @return The calculated temperature in 0.1 deg C units.
  */
-int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, uint16_t gainSens);
+int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, float gainSens);
 
 #endif // FILTER_H

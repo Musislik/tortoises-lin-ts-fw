@@ -28,7 +28,7 @@ This document defines the configuration parameters, memory layout, and LIN commu
 | **ADC HW Config** | `uint8_t` | N/A | Config | Read / Write | Hardware ADC sample time & hardware accumulator averaging. |
 | **SW Filter Config** | `uint8_t` | N/A | Config | Read / Write | Software digital filtering algorithm & window depth. |
 | **Sensor Voltage Offset (`offset_mv`)** | `uint16_t` | Little-Endian | Config | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$. **`0xFFFF` = Default ($500\,\text{mV}$)**. |
-| **Calibration Gain (`gain_sens`)** | `uint16_t` | Little-Endian | Config | Read / Write | Sensor transfer curve sensitivity in $0.1\,\text{mV}/^\circ\text{C}$. **`0` = Default ($10.0\,\text{mV}/^\circ\text{C}$ / $100$)**. |
+| **Calibration Gain (`gain_sens`)** | `float` | Little-Endian IEEE 754 | Config | Read / Write | Sensor transfer curve sensitivity in $\text{mV}/^\circ\text{C}$. **`0.0f` = Default ($10.0\,\text{mV}/^\circ\text{C}$)**. |
 | **Min Recorded Temperature** | `int16_t` | Little-Endian | Extremes | Read-Only | Lowest recorded temperature ($0.1^\circ\text{C}$). |
 | **Max Recorded Temperature** | `int16_t` | Little-Endian | Extremes | Read-Only | Highest recorded temperature ($0.1^\circ\text{C}$). |
 

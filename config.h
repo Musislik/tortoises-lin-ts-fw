@@ -12,8 +12,8 @@
 #define CONFIG_MAGIC   0xC0C0C0C0
 #define EXTREMES_MAGIC 0xECECECEC
 
-#define OFFSET_MV_DEFAULT 0xFFFF // Default maximum uint16_t which means default offset
-#define GAIN_SENS_DEFAULT 0x0000 // Default 0 means default gain
+#define OFFSET_MV_DEFAULT 0x0190 // Default offset
+#define GAIN_SENS_DEFAULT 0.0f // Default gain
 
 // PIDs baseline
 #define PID_GET_TEMP_DEFAULT   0x0A
@@ -35,13 +35,13 @@ typedef struct __attribute__((packed, aligned(8))) {
     uint32_t magic;
     uint32_t logicalNodeId;
     uint16_t offsetMv;
-    uint16_t gainSens;
+    float gainSens;
     uint8_t pidGetTemp;
     uint8_t pidGetConfig;
     uint8_t pidSetConfig;
     uint8_t filterHwAdc;
     uint8_t filterSwMode;
-    uint8_t _padding[7]; // Pad to 24 bytes (multiple of 8 for Flash ECC)
+    uint8_t _padding[5]; // Pad to 24 bytes (multiple of 8 for Flash ECC)
 } ConfigBlock_t;
 
 /**

@@ -93,7 +93,6 @@ void TIMER_SYS_INST_IRQHandler(void) {
             timer1msCounter++;
             timer1sCounter++;
             timerAdcCounter++;
-            dbg = true;
 
             if (timer1sCounter >= TIMER_1S_MS) {
                 timer1sCounter = 0;
@@ -178,8 +177,8 @@ static void initHardware(void) {
     NVIC_EnableIRQ(TIMER_SYS_INST_INT_IRQN);
     
     // Enable ADC Interrupt
-    NVIC_ClearPendingIRQ(ADC12_0_INST_INT_IRQN);
-    NVIC_EnableIRQ(ADC12_0_INST_INT_IRQN);
+    NVIC_ClearPendingIRQ(ADC0_INT_IRQn);
+    NVIC_EnableIRQ(ADC0_INT_IRQn);
 
     LIN_resetRX(LIN_RX_STATE_IDLE);
 
@@ -188,7 +187,7 @@ static void initHardware(void) {
     delay_cycles(DELAY_STANDARD_CYCLES);
 }
 
-void ADC12_0_INST_IRQHandler(void) {
+void ADC0_IRQHandler(void) {
     switch (DL_ADC12_getPendingInterrupt(ADC12_0_INST)) {
         case DL_ADC12_IIDX_MEM0_RESULT_LOADED:
             gRawAdc = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);

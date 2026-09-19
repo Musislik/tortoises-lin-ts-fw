@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "config.h"
+#include "ti/driverlib/dl_adc12.h"
 
 #define ADC_HW_CONFIG_TIME_SHIFT   4
 #define ADC_HW_CONFIG_MASK         0x0F

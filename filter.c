@@ -98,15 +98,17 @@ uint32_t filterProcess(uint32_t rawAdc, uint8_t swFilterConfig) {
     return sum / count;
 }
 
-int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, uint16_t gainSens) {
-    int32_t voltageMv = ((int32_t)rawAdc * ADC_VREF_MV) / ADC_MAX_VAL;
+int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, float gainSens) {
+    if (gainSens == 0.0f || ADC_MAX_VAL == 0) 
+    {
+        return INT32_MAX;
+    }
+
+    float voltageMv = (float)((float)rawAdc * ADC_VREF_MV) / ADC_MAX_VAL;
     
-    // Fallback behavior: if flash values are marked as invalid (e.g. uncalibrated unit), 
-    // default offset and gain are used to allow the unit to still function decently.
-    int32_t offsetEff = (offsetMv == OFFSET_MV_INVALID) ? TEMP_OFFSET_MV : (int32_t)offsetMv;
-    int32_t sensEff = (gainSens == GAIN_SENS_INVALID) ? GAIN_SENS_DEFAULT_VAL : (int32_t)gainSens;
+    float diffMv = voltageMv - offsetMv;
     
-    int32_t tempCx10 = ((voltageMv - offsetEff) * TEMP_MULTIPLIER) / sensEff;
-    
-    return tempCx10;
+    float tempCx10_f = diffMv / gainSens;
+
+    return (int32_t)(tempCx10_f + (tempCx10_f >= 0.0f ? 0.5f : -0.5f));
 }

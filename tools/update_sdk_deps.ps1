@@ -54,12 +54,19 @@ if (Test-Path $StartupSource) {
     Write-Warning "Startup file not found."
 }
 
-# 5. Linker script
-$LinkerSource = Join-Path $SdkDir "source\ti\devices\msp\m0p\linker_files\ticlang\mspm0c1103.cmd"
-if (Test-Path $LinkerSource) {
-    Copy-SdkItem -Source $LinkerSource -Destination (Join-Path $StartupDestDir "mspm0c1103.cmd")
+# 5. Linker scripts
+$LinkerSource1103 = Join-Path $SdkDir "source\ti\devices\msp\m0p\linker_files\ticlang\mspm0c1103.cmd"
+if (Test-Path $LinkerSource1103) {
+    Copy-SdkItem -Source $LinkerSource1103 -Destination (Join-Path $StartupDestDir "mspm0c1103.cmd")
 } else {
-    Write-Warning "Linker script not found."
+    Write-Warning "Linker script mspm0c1103.cmd not found."
+}
+
+$LinkerSource1104 = Join-Path $SdkDir "source\ti\devices\msp\m0p\linker_files\ticlang\mspm0c1104.cmd"
+if (Test-Path $LinkerSource1104) {
+    Copy-SdkItem -Source $LinkerSource1104 -Destination (Join-Path $StartupDestDir "mspm0c1104.cmd")
+} else {
+    Write-Warning "Linker script mspm0c1104.cmd not found."
 }
 
 Write-Host "Performing cleanup of unnecessary files..."

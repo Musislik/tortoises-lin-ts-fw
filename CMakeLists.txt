@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 project(Tortoises-Lin-TS LANGUAGES C)
 
+set(TARGET_BOARD "MSPM0C1103" CACHE STRING "Target MCU board (e.g. MSPM0C1103, MSPM0C1104)")
+string(TOLOWER ${TARGET_BOARD} TARGET_BOARD_LOWER)
+
 # Path to the SysConfig CLI tool
 set(SYSCONFIG_DIR "D:/ti/sysconfig_1.26.2" CACHE PATH "Path to SysConfig CLI")
 
@@ -38,9 +41,10 @@ add_custom_command(
         -s ${MSPM0_SDK_DIR}/.metadata/product.json
         -o ${SYSCFG_OUT_DIR}
         --compiler ticlang
+        -d ${TARGET_BOARD}
         ${CMAKE_CURRENT_SOURCE_DIR}/${SYSCFG_FILE}
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${SYSCFG_FILE}
-    COMMENT "Running SysConfig to generate configuration from Tortoises-Temp-Sensor.syscfg..."
+    COMMENT "Running SysConfig to generate configuration from Tortoises-Temp-Sensor.syscfg for ${TARGET_BOARD}..."
 )
 
 list(APPEND APP_SOURCES ${SYSCFG_OUT_DIR}/ti_msp_dl_config.c)
@@ -57,7 +61,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    __MSPM0C1103__
+    __${TARGET_BOARD}__
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE
@@ -72,7 +76,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
     -mfloat-abi=soft
     -mthumb
     -Wl,-m,${PROJECT_NAME}.map
-    ${CMAKE_CURRENT_SOURCE_DIR}/startup/mspm0c1103.cmd
+    ${CMAKE_CURRENT_SOURCE_DIR}/startup/${TARGET_BOARD_LOWER}.cmd
     -Wl,-i${CMAKE_CURRENT_SOURCE_DIR}/sdk
     -Wl,-i${SYSCFG_OUT_DIR}
     -Wl,-l${SYSCFG_OUT_DIR}/device.cmd.genlibs

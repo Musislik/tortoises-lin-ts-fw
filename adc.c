@@ -71,7 +71,7 @@ void adcInit(void) {
     delay_cycles(ADC_INIT_DELAY_CYCLES);
 
     // PIN MUX
-    DL_GPIO_initPeripheralAnalogFunction(IOMUX_PINCM21);
+    DL_GPIO_initPeripheralAnalogFunction(IOMUX_PINCM26);
 
     // ADC
     DL_ADC12_setClockConfig(ADC12_0_INST, (DL_ADC12_ClockConfig *) &gADC12_0ClockConfig);

@@ -12,6 +12,8 @@
 const GPIO     = scripting.addModule("/ti/driverlib/GPIO", {}, false);
 const GPIO1    = GPIO.addInstance();
 const SYSCTL   = scripting.addModule("/ti/driverlib/SYSCTL");
+const TIMER    = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const TIMER1   = TIMER.addInstance();
 const uartLIN  = scripting.addModule("/ti/driverlib/uartLIN", {}, false);
 const uartLIN1 = uartLIN.addInstance();
 
@@ -24,6 +26,13 @@ GPIO1.associatedPins[0].pin.$assign = "PA0";
 
 const Board = scripting.addModule("/ti/driverlib/Board", {}, false);
 
+
+TIMER1.$name              = "TIMER_SYS";
+TIMER1.timerMode          = "PERIODIC_UP";
+TIMER1.timerPeriod        = "1 ms";
+TIMER1.timerStartTimer    = true;
+TIMER1.interrupts         = ["ZERO"];
+TIMER1.peripheral.$assign = "TIMG8";
 
 uartLIN1.targetBaudRate                   = 19200;
 uartLIN1.enableLinCounter                 = true;

@@ -15,8 +15,8 @@
 #define LIN_TX_BUFFER_LEN 32
 #define LIN_SYNC_BYTE (0x55)
 
-#define SYSTICK_1S_MS               1000
-#define SYSTICK_100MS_MS            100
+#define TIMER_1S_MS               1000
+#define TIMER_100MS_MS            100
 #define CHECKSUM_OVERFLOW_THRESHOLD 256
 #define CHECKSUM_OVERFLOW_SUBTRACT  255
 #define DELAY_SWD_CYCLES            240000000
@@ -71,12 +71,12 @@ static volatile uint8_t activeRxPid = 0;
 
 static volatile LinRxState_t sLinRxState = LIN_RX_STATE_INIT;
 
-// SYSTICK for telemetry and ADC timing
-static volatile uint32_t systick1msCounter = 0;
-static volatile uint32_t systick1sCounter = 0;
-static volatile uint32_t systick100msCounter = 0;
-static volatile bool tick1sFlag = false;
-static volatile bool tick100msFlag = false;
+// TIMER for telemetry and ADC timing
+static volatile uint32_t timer1msCounter = 0;
+static volatile uint32_t timer1sCounter = 0;
+static volatile uint32_t timer100msCounter = 0;
+static volatile bool gFlagTimer1s = false;
+static volatile bool gFlagTimer100ms = false;
 
 // Pending config save from ISR
 volatile bool gPendingConfigSave = false;
@@ -85,19 +85,26 @@ ConfigBlock_t gPendingConfig;
 // Latest measured temperature available to LIN ISR
 volatile int16_t gLatestTemperature = 0;
 
-void SysTick_Handler(void) {
-    systick1msCounter++;
-    systick1sCounter++;
-    systick100msCounter++;
+void TIMER_SYS_INST_IRQHandler(void) {
+    switch (DL_TimerG_getPendingInterrupt(TIMER_SYS_INST)) {
+        case DL_TIMER_IIDX_ZERO:
+            timer1msCounter++;
+            timer1sCounter++;
+            timer100msCounter++;
+            dbg = true;
 
-    if (systick1sCounter >= SYSTICK_1S_MS) {
-        systick1sCounter = 0;
-        tick1sFlag = true;
-    }
+            if (timer1sCounter >= TIMER_1S_MS) {
+                timer1sCounter = 0;
+                gFlagTimer1s = true;
+            }
 
-    if (systick100msCounter >= SYSTICK_100MS_MS) {
-        systick100msCounter = 0;
-        tick100msFlag = true;
+            if (timer100msCounter >= TIMER_100MS_MS) {
+                timer100msCounter = 0;
+                gFlagTimer100ms = true;
+            }
+            break;
+        default:
+            break;
     }
 }
 
@@ -164,8 +171,9 @@ static void initHardware(void) {
     NVIC_ClearPendingIRQ(LIN_INST_INT_IRQN);
     NVIC_EnableIRQ(LIN_INST_INT_IRQN);
     
-    // Setup SysTick for 1ms
-    SysTick_Config(CPUCLK_FREQ / SYSTICK_1S_MS);
+    // Enable Sys Timer Interrupt
+    NVIC_ClearPendingIRQ(TIMER_SYS_INST_INT_IRQN);
+    NVIC_EnableIRQ(TIMER_SYS_INST_INT_IRQN);
 
     LIN_resetRX(LIN_RX_STATE_IDLE);
 
@@ -200,8 +208,8 @@ int main(void) {
             DL_ADC12_startConversion(ADC12_0_INST);
         }
 
-        if (tick100msFlag) {
-            tick100msFlag = false;
+        if (gFlagTimer100ms) {
+            gFlagTimer100ms = false;
             
             // Read ADC result of the previous 100ms cycle
             uint32_t adcTempVal = DL_ADC12_getMemResult(ADC12_0_INST, DL_ADC12_MEM_IDX_0);
@@ -221,8 +229,8 @@ int main(void) {
             DL_ADC12_startConversion(ADC12_0_INST);
         }
 
-        if (tick1sFlag) {
-            tick1sFlag = false;
+        if (gFlagTimer1s) {
+            gFlagTimer1s = false;
             telemetryTick();
         }
 

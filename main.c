@@ -154,8 +154,7 @@ static void initHardware(void) {
     delay_cycles(DELAY_STANDARD_CYCLES);
     */
     configInit();
-    filterInit();
-    setSwFilterConfig((FilterSwMode_t)gActiveConfig.filterSwMode);
+    setFilterConfig((FilterSwMode_t)gActiveConfig.filterSwMode, gActiveConfig.offsetMv, gActiveConfig.gainSens);
     telemetryInit();
     
     adcInit(); // Init ADC so it transfers result to memory
@@ -218,8 +217,7 @@ int main(void) {
                 // Flash write failed, could implement retry mechanism here
             } else {
                 adcReconfigure(newCfg.filterHwAdc);
-                filterInit(); // Reset software filter
-                setSwFilterConfig((FilterSwMode_t)newCfg.filterSwMode);
+                setFilterConfig((FilterSwMode_t)newCfg.filterSwMode, newCfg.offsetMv, newCfg.gainSens);
             }
             
             // Trigger a conversion after reconfiguring ADC
@@ -237,7 +235,7 @@ int main(void) {
             gFlagAdcReady = false;
             
             float voltageMv = adcRawToMv(gRawAdc);
-            int32_t temp = calcTemperature(voltageMv, gActiveConfig.offsetMv, gActiveConfig.gainSens);
+            int32_t temp = calcTemperature(voltageMv);
             
             // Atomic update of global temp for LIN ISR
             __disable_irq();

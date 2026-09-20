@@ -35,17 +35,21 @@ void filterInit(void);
  * then performs a two-point calibration linear conversion based on stored flash parameters.
  *
  * @param voltageMv The measured voltage in mV.
- * @param offsetMv The voltage offset at 0 degrees C in mV.
- * @param gainSens The gain sensitivity in mv/degC.
  * @return The calculated temperature in 0.1 deg C units, or INT32_MAX on error.
  */
-int32_t calcTemperature(float voltageMv, uint16_t offsetMv, float gainSens);
+int32_t calcTemperature(float voltageMv);
 
 /**
- * @brief Set the active software filter configuration mode.
+ * @brief Set the configuration parameters for the filter module.
+ *
+ * Updates the filter mode, offset, and gain. If any of the new 
+ * parameters differ from the current ones, the internal filter state and 
+ * lock mechanism will be reset via filterInit().
  *
  * @param swFilterConfig The software filter configuration mode.
+ * @param offsetMv The voltage offset at 0 degrees C in mV.
+ * @param gainSens The gain sensitivity in mv/degC.
  */
-void setSwFilterConfig(FilterSwMode_t swFilterConfig);
+void setFilterConfig(FilterSwMode_t swFilterConfig, uint16_t offsetMv, float gainSens);
 
 #endif // FILTER_H

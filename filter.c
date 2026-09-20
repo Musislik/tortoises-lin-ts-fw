@@ -10,6 +10,7 @@
 #define HW_VOLTAGE_MAX_MV 3250.0f
 #define TEMP_MIN_CX10 -400
 #define TEMP_MAX_CX10 1500
+#define TEMP_CX10_MULTIPLIER 10.0f
 
 // State for spike rejection and HW validation
 typedef enum {
@@ -215,7 +216,7 @@ int16_t calcTemperature(const float voltageMv) {
         tempCx10 = TEMP_INVALID_VALUE;
     } else {
         float diffMv = voltageMv - calOffsetMv;
-        float tempCx10_f = diffMv / calGainSens;
+        float tempCx10_f = (diffMv / calGainSens) * TEMP_CX10_MULTIPLIER;
 
         if (tempCx10_f < (float)TEMP_MIN_CX10 || tempCx10_f > (float)TEMP_MAX_CX10) {
             tempCx10 = TEMP_INVALID_VALUE;

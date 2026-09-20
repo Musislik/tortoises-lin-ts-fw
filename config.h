@@ -12,8 +12,8 @@
 #define CONFIG_MAGIC   0xC0C0C0C0
 #define EXTREMES_MAGIC 0xECECECEC
 
-#define OFFSET_MV_DEFAULT 0x0190 // Default offset
-#define GAIN_SENS_DEFAULT 0.0f // Default gain
+#define OFFSET_MV_DEFAULT 500 //    Default offset for TMP235
+#define GAIN_SENS_DEFAULT 10.0f //  Default gain for TMP235 (10.0 mV/degC)
 
 // PIDs baseline
 #define PID_GET_TEMP_DEFAULT   0x0A

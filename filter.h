@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TEMP_INVALID_VALUE INT32_MAX
+#define TEMP_INVALID_VALUE INT16_MAX
 
 /**
  * @brief Software filtering modes for ADC measurements.
@@ -35,9 +35,9 @@ void filterInit(void);
  * then performs a two-point calibration linear conversion based on stored flash parameters.
  *
  * @param voltageMv The measured voltage in mV.
- * @return The calculated temperature in 0.1 deg C units, or INT32_MAX on error.
+ * @return The calculated temperature in 0.1 deg C units, or INT16_MAX on error.
  */
-int32_t calcTemperature(const float voltageMv);
+int16_t calcTemperature(const float voltageMv);
 
 /**
  * @brief Set the configuration parameters for the filter module.

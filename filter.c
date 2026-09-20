@@ -25,16 +25,16 @@ static float calGainSens = 0.0f;
 static FilterLockState_t lockState = FILTER_STATE_INIT;
 static uint8_t startupCount = 0;
 static uint8_t errorCount = 0;
-static int32_t lastValidRaw = TEMP_INVALID_VALUE;
-static int32_t lastFilteredOut = TEMP_INVALID_VALUE;
+static int16_t lastValidRaw = TEMP_INVALID_VALUE;
+static int16_t lastFilteredOut = TEMP_INVALID_VALUE;
 
 // Ring buffer for moving average (up to 16 samples)
-static int32_t maBuffer[MAX_MA_SAMPLES];
+static int16_t maBuffer[MAX_MA_SAMPLES];
 static uint8_t maIndex = 0;
 static bool maFilled = false;
 
 // State for EMA
-static int32_t emaState = 0;
+static int16_t emaState = 0;
 static bool emaInitialized = false;
 
 
@@ -71,7 +71,7 @@ void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetM
     }
 }
 
-static int32_t filterProcess(int32_t rawTempCx10) {    
+static int16_t filterProcess(int16_t rawTempCx10) {    
     if (config == FILTER_SW_MODE_PASSTHROUGH) {
         // Passthrough is primarily used for factory calibration or raw hardware diagnostics 
         // where unadulterated readings are strictly required.
@@ -204,12 +204,12 @@ static int32_t filterProcess(int32_t rawTempCx10) {
 }
 
 
-int32_t calcTemperature(const float voltageMv) {
+int16_t calcTemperature(const float voltageMv) {
     if (calGainSens < 0.0001f && calGainSens > -0.0001f) {
         return TEMP_INVALID_VALUE;
     }
 
-    int32_t tempCx10 = TEMP_INVALID_VALUE;
+    int16_t tempCx10 = TEMP_INVALID_VALUE;
     
     if (!isVoltageValid(voltageMv)) {
         tempCx10 = TEMP_INVALID_VALUE;
@@ -220,7 +220,7 @@ int32_t calcTemperature(const float voltageMv) {
         if (tempCx10_f < (float)TEMP_MIN_CX10 || tempCx10_f > (float)TEMP_MAX_CX10) {
             tempCx10 = TEMP_INVALID_VALUE;
         } else {
-            tempCx10 = (int32_t)(tempCx10_f + (tempCx10_f >= 0.0f ? 0.5f : -0.5f));
+            tempCx10 = (int16_t)(tempCx10_f + (tempCx10_f >= 0.0f ? 0.5f : -0.5f));
         }
     }
 

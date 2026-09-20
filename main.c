@@ -85,7 +85,8 @@ volatile bool gPendingConfigSave = false;
 ConfigBlock_t gPendingConfig;
 
 // Latest measured temperature available to LIN ISR
-volatile int16_t gLatestTemperature = 0;
+volatile int16_t gTemp = INT16_MAX;
+
 
 void TIMER_SYS_INST_IRQHandler(void) {
     switch (DL_TimerG_getPendingInterrupt(TIMER_SYS_INST)) {
@@ -224,6 +225,8 @@ int main(void) {
             gFlagStartAdc = true;
         }
 
+
+        
         if (gFlagStartAdc) {
             gFlagStartAdc = false;
             
@@ -235,15 +238,15 @@ int main(void) {
             gFlagAdcReady = false;
             
             float voltageMv = adcRawToMv(gRawAdc);
-            int32_t temp = calcTemperature(voltageMv);
+            int16_t temp = calcTemperature(voltageMv);
             
             // Atomic update of global temp for LIN ISR
             __disable_irq();
-            gLatestTemperature = (int16_t)temp;
+            gTemp = temp;
             __enable_irq();
 
             // Run telemetry (will safely write Flash if needed)
-            telemetryUpdate((int16_t)temp);
+            telemetryUpdate(temp);
         }
 
         if (gFlagTimer1s) {
@@ -301,7 +304,7 @@ void LIN_INST_IRQHandler(void) {
                         // By caching the ADC result in the main loop and using it here, we decouple 
                         // the communication layer from the slow ADC sampling process, guaranteeing 
                         // an immediate response within the tight LIN timing constraints.
-                        int16_t temp = gLatestTemperature;
+                        int16_t temp = gTemp;
 
                         // Little-endian
                         txBuffer[0] = (uint8_t)(temp & 0xFF);

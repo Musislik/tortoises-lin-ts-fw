@@ -37,7 +37,7 @@ void filterInit(void);
  * @param voltageMv The measured voltage in mV.
  * @return The calculated temperature in 0.1 deg C units, or INT32_MAX on error.
  */
-int32_t calcTemperature(float voltageMv);
+int32_t calcTemperature(const float voltageMv);
 
 /**
  * @brief Set the configuration parameters for the filter module.
@@ -50,6 +50,6 @@ int32_t calcTemperature(float voltageMv);
  * @param offsetMv The voltage offset at 0 degrees C in mV.
  * @param gainSens The gain sensitivity in mv/degC.
  */
-void setFilterConfig(FilterSwMode_t swFilterConfig, uint16_t offsetMv, float gainSens);
+void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const float gainSens);
 
 #endif // FILTER_H

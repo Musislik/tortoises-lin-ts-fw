@@ -5,17 +5,22 @@
 #define MA_SAMPLES_4  4
 #define MA_SAMPLES_8  8
 #define MA_SAMPLES_16 16
-
-// Config variables
-static FilterSwMode_t config;
-static uint16_t calOffsetMv = 0;
-static float calGainSens = 0.0f;
+#define MAX_MA_SAMPLES MA_SAMPLES_16
+#define HW_VOLTAGE_MIN_MV 50.0f
+#define HW_VOLTAGE_MAX_MV 3250.0f
+#define TEMP_MIN_CX10 -400
+#define TEMP_MAX_CX10 1500
 
 // State for spike rejection and HW validation
 typedef enum {
     FILTER_STATE_INIT,
     FILTER_STATE_LOCKED
 } FilterLockState_t;
+
+// Config variables
+static FilterSwMode_t config = FILTER_SW_MODE_PASSTHROUGH;
+static uint16_t calOffsetMv = 0;
+static float calGainSens = 0.0f;
 
 static FilterLockState_t lockState = FILTER_STATE_INIT;
 static uint8_t startupCount = 0;
@@ -24,7 +29,6 @@ static int32_t lastValidRaw = TEMP_INVALID_VALUE;
 static int32_t lastFilteredOut = TEMP_INVALID_VALUE;
 
 // Ring buffer for moving average (up to 16 samples)
-#define MAX_MA_SAMPLES 16
 static int32_t maBuffer[MAX_MA_SAMPLES];
 static uint8_t maIndex = 0;
 static bool maFilled = false;
@@ -33,14 +37,12 @@ static bool maFilled = false;
 static int32_t emaState = 0;
 static bool emaInitialized = false;
 
-#define HW_VOLTAGE_MIN_MV 50.0f
-#define HW_VOLTAGE_MAX_MV 3250.0f
 
-static bool isVoltageValid(float voltageMv) {
-    if (voltageMv < HW_VOLTAGE_MIN_MV || voltageMv > HW_VOLTAGE_MAX_MV) {
-        return false;
+static bool isVoltageValid(const float voltageMv) {
+    if (voltageMv >= HW_VOLTAGE_MIN_MV && voltageMv <= HW_VOLTAGE_MAX_MV) {
+        return true;
     }
-    return true;
+    return false;
 }
 
 void filterInit(void) {
@@ -50,13 +52,23 @@ void filterInit(void) {
     for (int i = 0; i < MAX_MA_SAMPLES; i++) {
         maBuffer[i] = 0;
     }
-    config = FILTER_SW_MODE_PASSTHROUGH;
 
     lockState = FILTER_STATE_INIT;
     startupCount = 0;
     errorCount = 0;
     lastValidRaw = TEMP_INVALID_VALUE;
     lastFilteredOut = TEMP_INVALID_VALUE;
+}
+
+void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const float gainSens) {
+    if (calOffsetMv != offsetMv || config != swFilterConfig || 
+        (calGainSens - gainSens > 0.0001f || calGainSens - gainSens < -0.0001f)) 
+    {
+        filterInit();
+        calOffsetMv = offsetMv;
+        calGainSens = gainSens;
+        config = swFilterConfig;
+    }
 }
 
 static int32_t filterProcess(int32_t rawTempCx10) {    
@@ -77,7 +89,9 @@ static int32_t filterProcess(int32_t rawTempCx10) {
             startupCount = 1;
         } else {
             int32_t diff = rawTempCx10 - lastValidRaw;
-            if (diff < 0) diff = -diff;
+            if (diff < 0) {
+                diff = -diff;
+            }
             
             if (diff <= 200) { // 20.0 deg C jump limit
                 startupCount++;
@@ -105,7 +119,9 @@ static int32_t filterProcess(int32_t rawTempCx10) {
             isValid = false;
         } else {
             int32_t diff = rawTempCx10 - lastValidRaw;
-            if (diff < 0) diff = -diff;
+            if (diff < 0) {
+                diff = -diff;
+            }
             if (diff > 200) {
                 isValid = false;
             }
@@ -144,12 +160,13 @@ static int32_t filterProcess(int32_t rawTempCx10) {
         uint8_t shift = (config - FILTER_SW_MODE_MA_16); 
         
         // EMA: y_n = y_{n-1} + alpha * (x_n - y_{n-1})
-        // y_n = y_{n-1} + (x_n - y_{n-1}) >> shift
-        // Bitwise right-shift is used here as a highly optimized substitute for floating-point division 
-        // to calculate the alpha weighting on resource-constrained microcontrollers.
+        // y_n = y_{n-1} + (x_n - y_{n-1}) / (1 << shift)
+        // Integer division ensures correct rounding towards zero for negative differences.
+        // The compiler optimizes this operation into a safe arithmetic shift.
         
         int32_t diff = rawTempCx10 - emaState;
-        emaState = emaState + (diff >> shift);
+        int32_t adjustment = diff / (1 << shift);
+        emaState = emaState + adjustment;
         lastFilteredOut = emaState;
         return emaState;
     }
@@ -186,35 +203,26 @@ static int32_t filterProcess(int32_t rawTempCx10) {
     return lastFilteredOut;
 }
 
-int32_t calcTemperature(float voltageMv) {
-    if (calGainSens == 0.0f) 
-    {
+
+int32_t calcTemperature(const float voltageMv) {
+    if (calGainSens < 0.0001f && calGainSens > -0.0001f) {
         return TEMP_INVALID_VALUE;
     }
 
-    int32_t tempCx10;
-    if (!isVoltageValid(voltageMv)) 
-    {
+    int32_t tempCx10 = TEMP_INVALID_VALUE;
+    
+    if (!isVoltageValid(voltageMv)) {
         tempCx10 = TEMP_INVALID_VALUE;
-    }
-    else
-    {
+    } else {
         float diffMv = voltageMv - calOffsetMv;
-        
         float tempCx10_f = diffMv / calGainSens;
 
-        tempCx10 = (int32_t)(tempCx10_f + (tempCx10_f >= 0.0f ? 0.5f : -0.5f));
+        if (tempCx10_f < (float)TEMP_MIN_CX10 || tempCx10_f > (float)TEMP_MAX_CX10) {
+            tempCx10 = TEMP_INVALID_VALUE;
+        } else {
+            tempCx10 = (int32_t)(tempCx10_f + (tempCx10_f >= 0.0f ? 0.5f : -0.5f));
+        }
     }
 
     return filterProcess(tempCx10);
-}
-
-void setFilterConfig(FilterSwMode_t swFilterConfig, uint16_t offsetMv, float gainSens)
-{
-    if (calOffsetMv != offsetMv || calGainSens != gainSens || config != swFilterConfig) {
-        filterInit();
-        calOffsetMv = offsetMv;
-        calGainSens = gainSens;
-        config = swFilterConfig;
-    }
 }

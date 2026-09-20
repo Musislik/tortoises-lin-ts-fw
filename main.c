@@ -155,6 +155,7 @@ static void initHardware(void) {
     */
     configInit();
     filterInit();
+    setSwFilterConfig((FilterSwMode_t)gActiveConfig.filterSwMode);
     telemetryInit();
     
     adcInit(); // Init ADC so it transfers result to memory
@@ -218,6 +219,7 @@ int main(void) {
             } else {
                 adcReconfigure(newCfg.filterHwAdc);
                 filterInit(); // Reset software filter
+                setSwFilterConfig((FilterSwMode_t)newCfg.filterSwMode);
             }
             
             // Trigger a conversion after reconfiguring ADC
@@ -234,8 +236,7 @@ int main(void) {
         if (gFlagAdcReady) {
             gFlagAdcReady = false;
             
-            uint32_t filteredAdc = filterProcess(gRawAdc, gActiveConfig.filterSwMode);
-            int32_t temp = calcTemperature(filteredAdc, gActiveConfig.offsetMv, gActiveConfig.gainSens);
+            int32_t temp = calcTemperature(gRawAdc, gActiveConfig.offsetMv, gActiveConfig.gainSens);
             
             // Atomic update of global temp for LIN ISR
             __disable_irq();

@@ -143,7 +143,7 @@ static void LIN_resetRX(LinRxState_t newState) {
 static void initHardware(void) {
     SYSCFG_DL_init();
     
-    delay_cycles(DELAY_SWD_CYCLES/2); // 10s delay for SWD
+    delay_cycles(DELAY_SWD_CYCLES); // 10s delay for SWD
     delay_cycles(DELAY_STANDARD_CYCLES);
     // Init GPIO - LIN enable pin
     DL_GPIO_initDigitalOutput(IOMUX_PINCM20);

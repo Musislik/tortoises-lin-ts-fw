@@ -236,7 +236,8 @@ int main(void) {
         if (gFlagAdcReady) {
             gFlagAdcReady = false;
             
-            int32_t temp = calcTemperature(gRawAdc, gActiveConfig.offsetMv, gActiveConfig.gainSens);
+            float voltageMv = adcRawToMv(gRawAdc);
+            int32_t temp = calcTemperature(voltageMv, gActiveConfig.offsetMv, gActiveConfig.gainSens);
             
             // Atomic update of global temp for LIN ISR
             __disable_irq();

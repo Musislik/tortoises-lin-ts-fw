@@ -2,9 +2,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define ADC_VREF_MV 3300
-#define ADC_MAX_VAL 4095
-
 #define MA_SAMPLES_4  4
 #define MA_SAMPLES_8  8
 #define MA_SAMPLES_16 16
@@ -95,8 +92,8 @@ static int32_t filterProcess(int32_t rawTempCx10) {
     return sum / (int32_t)count;
 }
 
-int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, float gainSens) {
-    if (gainSens == 0.0f || ADC_MAX_VAL == 0) 
+int32_t calcTemperature(float voltageMv, uint16_t offsetMv, float gainSens) {
+    if (gainSens == 0.0f) 
     {
         return INT32_MAX;
     }

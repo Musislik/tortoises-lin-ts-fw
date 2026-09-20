@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define TEMP_INVALID_VALUE 0xFFFF
+#define TEMP_INVALID_VALUE INT32_MAX
 
 /**
  * @brief Software filtering modes for ADC measurements.
@@ -29,17 +29,17 @@ typedef enum {
 void filterInit(void);
 
 /**
- * @brief Calculate the temperature in 0.1 deg C from a raw ADC value.
+ * @brief Calculate the temperature in 0.1 deg C from a voltage value.
  *
  * Internally applies the configured software filter (Moving Average or EMA),
  * then performs a two-point calibration linear conversion based on stored flash parameters.
  *
- * @param rawAdc The raw ADC reading.
+ * @param voltageMv The measured voltage in mV.
  * @param offsetMv The voltage offset at 0 degrees C in mV.
  * @param gainSens The gain sensitivity in mv/degC.
  * @return The calculated temperature in 0.1 deg C units, or INT32_MAX on error.
  */
-int32_t calcTemperature(uint32_t rawAdc, uint16_t offsetMv, float gainSens);
+int32_t calcTemperature(float voltageMv, uint16_t offsetMv, float gainSens);
 
 /**
  * @brief Set the active software filter configuration mode.

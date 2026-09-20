@@ -9,6 +9,18 @@
 #define ADC12_0_INST ADC0
 #define ADC12_0_ADCMEM_0 DL_ADC12_MEM_IDX_0
 
+#define ADC_VREF_MV 3300
+#define ADC_MAX_VAL 4095
+
+/**
+ * @brief Converts a raw ADC reading to voltage in millivolts.
+ * @param raw The raw ADC value.
+ * @return The corresponding voltage in millivolts.
+ */
+static inline float adcRawToMv(uint32_t raw) {
+    return (float)((float)raw * ADC_VREF_MV) / ADC_MAX_VAL;
+}
+
 /**
  * @brief Initialize the ADC peripheral.
  *

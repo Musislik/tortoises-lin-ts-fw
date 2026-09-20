@@ -145,7 +145,6 @@ static void initHardware(void) {
     
     delay_cycles(DELAY_SWD_CYCLES/2); // 10s delay for SWD
     delay_cycles(DELAY_STANDARD_CYCLES);
-    /*
     // Init GPIO - LIN enable pin
     DL_GPIO_initDigitalOutput(IOMUX_PINCM20);
     DL_GPIO_clearPins(GPIOA, DL_GPIO_PIN_19);
@@ -153,7 +152,6 @@ static void initHardware(void) {
     DL_GPIO_setPins(GPIOA, DL_GPIO_PIN_19); // Enable LIN transceiver
 
     delay_cycles(DELAY_STANDARD_CYCLES);
-    */
     configInit();
     setFilterConfig((FilterSwMode_t)gActiveConfig.filterSwMode, gActiveConfig.offsetMv, gActiveConfig.gainSens);
     telemetryInit();

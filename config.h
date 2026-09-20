@@ -16,9 +16,9 @@
 #define GAIN_SENS_DEFAULT 10.0f //  Default gain for TMP235 (10.0 mV/degC)
 
 // PIDs baseline
-#define PID_GET_TEMP_DEFAULT   0x0A
-#define PID_GET_CONFIG_DEFAULT 0x0B
-#define PID_SET_CONFIG_DEFAULT 0x0C
+#define PID_GET_TEMP_DEFAULT   0x20
+#define PID_GET_CONFIG_DEFAULT 0x21
+#define PID_SET_CONFIG_DEFAULT 0x22
 
 /**
  * @brief Factory block structure for one-time programmed data.

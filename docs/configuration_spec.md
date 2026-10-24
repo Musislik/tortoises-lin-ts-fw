@@ -9,9 +9,9 @@ This document defines the configuration parameters, memory layout, and LIN commu
 - **Checksum Model:** **Enhanced Checksum only** (PID included in the checksum calculation over the entire payload).
 - **Endianness:** **Little-Endian (LSB first)** for all multi-byte values (`uint16_t`, `int16_t`, `uint32_t`).
 - **Hardware Serial Number:** Read directly at runtime from TI Factory Region via DriverLib (`DL_FactoryRegion_getTraceID()`).
-- **Memory Architecture:** Parameters and operational extremes are unified into a **single Flash memory block** (Sector 6, 32 bytes, 64-bit aligned for hardware ECC):
+- **Memory Architecture:** Parameters and operational extremes are unified into a **single Flash memory block** (Sector 7, 32 bytes, 64-bit aligned for hardware ECC):
   1. **TI Factory Region (`0x41C40000`, Hardware Read-Only):** Holds unique silicon wafer/die Trace ID. Read dynamically on boot / request.
-  2. **Unified Configuration Block (Sector 6, `0x1800`, Read/Write):** Holds user/network configuration and operational extremes (Min/Max recorded temperatures) in a single 32-byte block.
+  2. **Unified Configuration Block (Sector 7, `0x1C00`, Read/Write):** Holds user/network configuration and operational extremes (Min/Max recorded temperatures) in a single 32-byte block.
 
 ---
 

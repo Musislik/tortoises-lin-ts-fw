@@ -36,7 +36,12 @@
 
 MEMORY
 {
-    FLASH           (RX)  : origin = 0x00000000, length = 0x00002000
+    /* Application Flash memory: 7 KB (Sectors 0 to 6: 0x0000 to 0x1BFF) */
+    FLASH           (RX)  : origin = 0x00000000, length = 0x00001C00
+
+    /* Reserved Flash sector for persistent configuration & extremes: 1 KB (Sector 7: 0x1C00 to 0x1FFF) */
+    FLASH_CONFIG    (R)   : origin = 0x00001C00, length = 0x00000400
+
     SRAM            (RWX) : origin = 0x20000000, length = 0x00000400
     BCR_CONFIG      (R)   : origin = 0x41C00000, length = 0x000000FF
 }

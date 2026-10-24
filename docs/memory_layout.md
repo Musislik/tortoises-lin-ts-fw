@@ -34,11 +34,11 @@ This document defines the complete physical and logical memory architecture for 
 0x0000_1000 ├─────────────────────────────────────────────────────────┤
             │ Sector 4: Free Flash / Code Expansion Reserve           │ 1024 B
 0x0000_1400 ├─────────────────────────────────────────────────────────┤
-            │ Sector 5: Factory Block (Locked / Production Provision) │ 1024 B
+            │ Sector 5: Free Flash / Code Expansion Reserve           │ 1024 B
 0x0000_1800 ├─────────────────────────────────────────────────────────┤
-            │ Sector 6: User Configuration Block (Runtime R/W)        │ 1024 B
+            │ Sector 6: Free Flash / Code Expansion Reserve           │ 1024 B
 0x0000_1C00 ├─────────────────────────────────────────────────────────┤
-            │ Sector 7: Telemetry & Extremes Block (Runtime R/W)      │ 1024 B
+            │ Sector 7: Unified Configuration Block (Runtime R/W)     │ 1024 B
 0x0000_2000 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -50,10 +50,10 @@ This document defines the complete physical and logical memory architecture for 
 | **1** | `0x0000_0400` | `0x0000_07FF` | 1 kB | `FLASH` | Application logic (`main`, `adc`, `filter`) | Flashed with FW |
 | **2** | `0x0000_0800` | `0x0000_0BFF` | 1 kB | `FLASH` | TI DriverLib + LIN communication handlers | Flashed with FW |
 | **3** | `0x0000_0C00` | `0x0000_0FFF` | 1 kB | `FLASH` | Code reserve / future feature expansion | Flashed with FW |
-| **4** | `0x0000_1000` | `0x0000_13FF` | 1 kB | `FLASH` | Code reserve (Upper limit of code `0x13FF`) | Flashed with FW |
-| **5** | `0x0000_1400` | `0x0000_17FF` | 1 kB | `RESERVED` | Reserved (Formerly Factory Block, now via TI Trace ID) | Unused |
-| **6** | `0x0000_1800` | `0x0000_1BFF` | 1 kB | `CONFIG` | **Unified Configuration Block (`ConfigBlock_t`)** | Runtime via LIN & Telemetry |
-| **7** | `0x0000_1C00` | `0x0000_1FFF` | 1 kB | `RESERVED` | Reserved (Extremes merged into Sector 6) | Unused |
+| **4** | `0x0000_1000` | `0x0000_13FF` | 1 kB | `FLASH` | Code reserve | Flashed with FW |
+| **5** | `0x0000_1400` | `0x0000_17FF` | 1 kB | `FLASH` | Code reserve | Flashed with FW |
+| **6** | `0x0000_1800` | `0x0000_1BFF` | 1 kB | `FLASH` | Code reserve (Upper limit of code `0x1BFF`) | Flashed with FW |
+| **7** | `0x0000_1C00` | `0x0000_1FFF` | 1 kB | `FLASH_CONFIG` | **Unified Configuration Block (`ConfigBlock_t`)** | Runtime via LIN & Telemetry |
 
 ---
 
@@ -64,10 +64,10 @@ This document defines the complete physical and logical memory architecture for 
 * **Storage:** Read directly from TI hardware register `FACTORYREGION->TRACEID` (`0x41C40000`) using DriverLib function `DL_FactoryRegion_getTraceID()`.
 * **Characteristics:** Unique 32-bit wafer/lot trace ID burned by TI during ATE testing. Requires zero Flash memory.
 
-### 3.2 Sector 6: Unified Configuration & Extremes Block (`CONFIG_BLOCK_ADDR = 0x0000_1800`)
+### 3.2 Sector 7: Unified Configuration & Extremes Block (`CONFIG_BLOCK_ADDR = 0x0000_1C00`)
 * **Purpose:** Network node identity, sensor calibration, filter modes, LIN PIDs, and operational temperature extremes.
 * **Access Policy:** Read/Write. Updated dynamically when a valid `PID_SET_CONFIG` frame is received via LIN or when significant extremes are recorded.
-* **Function Handler:** `configSave()` erases Sector 6 and writes 32 bytes (four 64-bit ECC chunks).
+* **Function Handler:** `configSave()` erases Sector 7 and writes 32 bytes (four 64-bit ECC chunks).
 * **Layout (`ConfigBlock_t`, 32 bytes, 64-bit aligned):**
   ```c
   typedef struct __attribute__((packed, aligned(8))) {
@@ -90,29 +90,23 @@ This document defines the complete physical and logical memory architecture for 
 
 ## 4. Linker Configuration & Overflow Protection
 
-To guarantee that application code can never accidentally expand into Sector 5 (Factory Block) or Sector 6/7, the linker command file (`startup/mspm0c1103.cmd`) enforces strict boundary segmentation:
+To guarantee that application code can never accidentally expand into Sector 7 (Configuration Block), the linker command file (`mspm0c1103.cmd`) enforces strict boundary segmentation:
 
 ```cmd
 MEMORY
 {
-    /* Application Flash strictly limited to 5 kB (Sectors 0 to 4). */
-    /* Linker produces an error if code exceeds 0x13FF.              */
-    FLASH       (RX)  : origin = 0x00000000, length = 0x00001400
+    /* Application Flash strictly limited to 7 kB (Sectors 0 to 6). */
+    /* Linker produces an error if code exceeds 0x1BFF.              */
+    FLASH           (RX)  : origin = 0x00000000, length = 0x00001C00
 
-    /* Sector 5: Factory Block (1 kB)                               */
-    FACTORY     (R)   : origin = 0x00001400, length = 0x00000400
-
-    /* Sector 6: User Configuration Block (1 kB)                    */
-    CONFIG      (R)   : origin = 0x00001800, length = 0x00000400
-
-    /* Sector 7: Extremes & Telemetry Block (1 kB)                  */
-    EXTREMES    (R)   : origin = 0x00001C00, length = 0x00000400
+    /* Sector 7: Persistent Configuration & Extremes Block (1 kB)   */
+    FLASH_CONFIG    (R)   : origin = 0x00001C00, length = 0x00000400
 
     /* SRAM: 1 kB total                                             */
-    SRAM        (RWX) : origin = 0x20000000, length = 0x00000400
+    SRAM            (RWX) : origin = 0x20000000, length = 0x00000400
 
     /* Boot Configuration Register                                  */
-    BCR_CONFIG  (R)   : origin = 0x41C00000, length = 0x000000FF
+    BCR_CONFIG      (R)   : origin = 0x41C00000, length = 0x000000FF
 }
 
 SECTIONS

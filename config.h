@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define CONFIG_BLOCK_ADDR   0x1800
+#define CONFIG_BLOCK_ADDR   0x1C00
 #define CONFIG_MAGIC        0xCFCFCF00
 
 #define OFFSET_MV_DEFAULT   0x01F40000  // Default offset for TMP235 (500.0 mV in Q16.16)

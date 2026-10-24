@@ -33,6 +33,10 @@ void configInit(void) {
         gActiveConfig.minTemp = MIN_TEMP_DEFAULT;
         gActiveConfig.maxTemp = MAX_TEMP_DEFAULT;
         memset(gActiveConfig._padding, 0xFF, sizeof(gActiveConfig._padding));
+
+        // Persist default configuration to flash on first boot so that subsequent
+        // boots find a valid magic signature and the sector is permanently provisioned.
+        configSave(&gActiveConfig);
     }
 }
 

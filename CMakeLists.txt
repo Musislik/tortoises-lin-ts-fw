@@ -72,7 +72,7 @@ target_link_options(${PROJECT_NAME} PRIVATE
     -mfloat-abi=soft
     -mthumb
     -Wl,-m,${PROJECT_NAME}.map
-    ${CMAKE_CURRENT_SOURCE_DIR}/startup/mspm0c1103.cmd
+    ${CMAKE_CURRENT_SOURCE_DIR}/mspm0c1103.cmd
     -Wl,-i${CMAKE_CURRENT_SOURCE_DIR}/sdk
     -Wl,-i${SYSCFG_OUT_DIR}
     -Wl,-l${SYSCFG_OUT_DIR}/device.cmd.genlibs

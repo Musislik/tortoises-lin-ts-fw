@@ -54,13 +54,9 @@ if (Test-Path $StartupSource) {
     Write-Warning "Startup file not found."
 }
 
-# 5. Linker script
-$LinkerSource = Join-Path $SdkDir "source\ti\devices\msp\m0p\linker_files\ticlang\mspm0c1103.cmd"
-if (Test-Path $LinkerSource) {
-    Copy-SdkItem -Source $LinkerSource -Destination (Join-Path $StartupDestDir "mspm0c1103.cmd")
-} else {
-    Write-Warning "Linker script not found."
-}
+# 5. Linker script:
+# The project uses a custom partitioned linker script in the project root (mspm0c1103.cmd)
+# to reserve Sector 7 for persistent configuration. Do not overwrite from SDK.
 
 Write-Host "Performing cleanup of unnecessary files..."
 

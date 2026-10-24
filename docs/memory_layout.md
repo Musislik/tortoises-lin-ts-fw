@@ -87,7 +87,7 @@ This document defines the complete physical and logical memory architecture for 
 
       // Chunk 2 (8 bytes)
       uint16_t offsetMv;        // Sensor voltage at 0 deg C in mV (e.g. 500)
-      float    gainSens;        // Sensitivity in mV/deg C (e.g. 10.0f)
+      uint32_t gainSens;        // Sensitivity in UQ16.16 (e.g. 0x000A0000 = 10.0 mV/deg C)
       uint8_t  pidGetTemp;      // Configured LIN PID for temperature query
       uint8_t  pidGetConfig;    // Configured LIN PID for configuration read
 

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "ti/driverlib/dl_uart_extend.h"
+#include <ti/driverlib/m0p/dl_factoryregion.h>
 #include "ti_msp_dl_config.h"
 
 // Defines for LIN
@@ -212,9 +213,14 @@ int main(void) {
             gPendingConfigSave = false;
             __enable_irq();
 
-            if (!configSaveUser(&newCfg)) {
+            // Preserve current temperature extremes
+            newCfg.minTemp = gCurrentMinTemp;
+            newCfg.maxTemp = gCurrentMaxTemp;
+
+            if (!configSave(&newCfg)) {
                 // Flash write failed, could implement retry mechanism here
             } else {
+                telemetryNotifyConfigSaved();
                 adcReconfigure(newCfg.filterHwAdc);
                 setFilterConfig((FilterSwMode_t)newCfg.filterSwMode, newCfg.offsetMv, newCfg.gainSens);
             }
@@ -335,10 +341,11 @@ void LIN_INST_IRQHandler(void) {
                         txBuffer[13] = gActiveConfig.filterHwAdc;
                         txBuffer[14] = gActiveConfig.filterSwMode;
                         
-                        txBuffer[15] = (uint8_t)(gActiveFactory.factorySn & 0xFF);
-                        txBuffer[16] = (uint8_t)((gActiveFactory.factorySn >> 8) & 0xFF);
-                        txBuffer[17] = (uint8_t)((gActiveFactory.factorySn >> 16) & 0xFF);
-                        txBuffer[18] = (uint8_t)((gActiveFactory.factorySn >> 24) & 0xFF);
+                        uint32_t traceId = DL_FactoryRegion_getTraceID();
+                        txBuffer[15] = (uint8_t)(traceId & 0xFF);
+                        txBuffer[16] = (uint8_t)((traceId >> 8) & 0xFF);
+                        txBuffer[17] = (uint8_t)((traceId >> 16) & 0xFF);
+                        txBuffer[18] = (uint8_t)((traceId >> 24) & 0xFF);
                         
                         txBuffer[19] = calcChecksum(rxByte, txBuffer, 19);
                         
@@ -381,6 +388,10 @@ void LIN_INST_IRQHandler(void) {
                             newConfig.pidSetConfig = rxBuffer[12];
                             newConfig.filterHwAdc = rxBuffer[13];
                             newConfig.filterSwMode = rxBuffer[14];
+                            
+                            // Preserve active recorded extremes
+                            newConfig.minTemp = gCurrentMinTemp;
+                            newConfig.maxTemp = gCurrentMaxTemp;
                             
                             // Signal main loop to save to flash
                             gPendingConfig = newConfig;

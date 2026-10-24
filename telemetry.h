@@ -13,6 +13,13 @@ extern int16_t gCurrentMaxTemp;
 void telemetryInit(void);
 
 /**
+ * @brief Notify telemetry that the active configuration block was committed to flash.
+ *
+ * Synchronizes last committed extremes with current RAM extremes and cancels pending commit.
+ */
+void telemetryNotifyConfigSaved(void);
+
+/**
  * @brief Update telemetry statistics with a new temperature reading.
  * @param newTemp The new temperature reading in 0.1 deg C.
  */

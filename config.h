@@ -4,16 +4,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define FACTORY_BLOCK_ADDR  0x1400
 #define CONFIG_BLOCK_ADDR   0x1800
-#define EXTREMES_BLOCK_ADDR 0x1C00
+#define CONFIG_MAGIC        0xCFCFCF00
 
-#define FACTORY_MAGIC  0xFACFAC00
-#define CONFIG_MAGIC   0xCFCFCF00
-#define EXTREMES_MAGIC 0xECECEC00
-
-#define OFFSET_MV_DEFAULT 500         // Default offset for TMP235 (500 mV)
-#define GAIN_SENS_DEFAULT 0x000A0000U // Default gain for TMP235 (10.0 mV/degC in UQ16.16)
+#define OFFSET_MV_DEFAULT   500         // Default offset for TMP235 (500 mV)
+#define GAIN_SENS_DEFAULT   0x000A0000U // Default gain for TMP235 (10.0 mV/degC in UQ16.16)
 
 // PIDs baseline
 #define PID_GET_TEMP_DEFAULT   0x20
@@ -21,68 +16,44 @@
 #define PID_SET_CONFIG_DEFAULT 0x22
 
 /**
- * @brief Factory block structure for one-time programmed data.
- */
-typedef struct __attribute__((packed, aligned(8))) {
-    uint32_t magic;
-    uint32_t factorySn;
-} FactoryBlock_t;
-
-/**
- * @brief User configuration block structure.
+ * @brief User configuration block structure with merged operational extremes.
  */
 typedef struct __attribute__((packed, aligned(8))) {
     uint32_t magic;
     uint32_t logicalNodeId;
     uint16_t offsetMv;
     uint32_t gainSens;
-    uint8_t pidGetTemp;
-    uint8_t pidGetConfig;
-    uint8_t pidSetConfig;
-    uint8_t filterHwAdc;
-    uint8_t filterSwMode;
-    uint8_t _padding[5]; // Pad to 24 bytes (multiple of 8 for Flash ECC)
+    uint8_t  pidGetTemp;
+    uint8_t  pidGetConfig;
+    uint8_t  pidSetConfig;
+    uint8_t  filterHwAdc;
+    uint8_t  filterSwMode;
+    int16_t  minTemp;
+    int16_t  maxTemp;
+    uint8_t  _padding[1]; // Pad to 24 bytes (multiple of 8 for Flash ECC)
 } ConfigBlock_t;
 
-/**
- * @brief Extremes block structure for recording min/max temperatures.
- */
-typedef struct __attribute__((packed, aligned(8))) {
-    uint32_t magic;
-    int16_t minTemp;
-    int16_t maxTemp;
-} ExtremesBlock_t;
+_Static_assert(sizeof(ConfigBlock_t) == 24, "ConfigBlock_t must be exactly 24 bytes");
 
 extern ConfigBlock_t gActiveConfig;
-extern FactoryBlock_t gActiveFactory;
-extern ExtremesBlock_t gActiveExtremes;
 
 /**
- * @brief Initializes the configuration blocks from flash.
+ * @brief Initializes the configuration block from flash.
  *
- * This routine verifies the integrity of the distinct flash blocks (Factory, Config, 
- * Extremes) using magic numbers. Separation into distinct blocks prevents corruption 
- * of extremes or factory data during user configuration updates, and minimizes flash wear.
+ * This routine verifies the integrity of the unified configuration block using
+ * the magic number. If the block is invalid or empty, default values including
+ * initial temperature extremes are loaded.
  */
 void configInit(void);
 
 /**
- * @brief Saves the user configuration block to flash.
+ * @brief Saves the unified configuration block to flash.
  *
- * @param newConfig Pointer to the new configuration data.
+ * @param newConfig Pointer to the configuration data to write.
  * @return true if successful, false otherwise.
  */
-bool configSaveUser(const ConfigBlock_t *newConfig);
+bool configSave(const ConfigBlock_t *newConfig);
 
-/**
- * @brief Saves the extremes block to flash.
- *
- * Extremes are stored in a separate flash sector to isolate frequent writes from 
- * the static user configuration, reducing wear on the config sector.
- *
- * @param newExtremes Pointer to the new extremes data.
- * @return true if successful, false otherwise.
- */
-bool configSaveExtremes(const ExtremesBlock_t *newExtremes);
+#define configSaveUser configSave
 
 #endif // CONFIG_H

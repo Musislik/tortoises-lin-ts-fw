@@ -8,10 +8,10 @@ This document defines the configuration parameters, memory layout, and LIN commu
 - **LIN Protocol:** LIN 2.x physical/data layer with extended custom payload frames (allowing frames larger than 8 bytes for unified single-transaction configuration).
 - **Checksum Model:** **Enhanced Checksum only** (PID included in the checksum calculation over the entire payload).
 - **Endianness:** **Little-Endian (LSB first)** for all multi-byte values (`uint16_t`, `int16_t`, `uint32_t`).
-- **Memory Architecture:** Parameters are structured into **three independent Flash memory blocks** (sectors) with 64-bit alignment and hardware ECC:
-  1. **Factory Block (Sector 5, Read-Only):** Holds permanent manufacturing data (Factory Serial Number). Never erased or modified during runtime.
-  2. **Configuration Block (Sector 6, Read/Write):** Holds user/network configuration (Logical Node ID, Calibration, Filtering, PIDs). Written only upon configuration command.
-  3. **Telemetry & Extremes Block (Sector 7, Read/Write):** Holds historical operational statistics (Min/Max recorded temperatures). Managed dynamically in RAM and committed to Flash under specific hysteresis rules.
+- **Hardware Serial Number:** Read directly at runtime from TI Factory Region via DriverLib (`DL_FactoryRegion_getTraceID()`).
+- **Memory Architecture:** Parameters and operational extremes are unified into a **single Flash memory block** (Sector 6, 24 bytes, 64-bit aligned for hardware ECC):
+  1. **TI Factory Region (`0x41C40000`, Hardware Read-Only):** Holds unique silicon wafer/die Trace ID. Read dynamically on boot / request.
+  2. **Unified Configuration Block (Sector 6, `0x1800`, Read/Write):** Holds user/network configuration and operational extremes (Min/Max recorded temperatures) in a single 24-byte block.
 
 ---
 
@@ -19,18 +19,18 @@ This document defines the configuration parameters, memory layout, and LIN commu
 
 | Parameter | Type | Endianness | Storage Block | Access via LIN | Description |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Magic Word** | `uint32_t` | Little-Endian | All Blocks | Internal | Block integrity & validation signature. |
-| **Factory Serial Number (SN)** | `uint32_t` | Little-Endian | Factory | Read-Only | Permanent unique hardware ID burned during production. |
-| **Logical Node ID** | `uint32_t` | Little-Endian | Config | Read / Write | 32-bit system position / role ID in the vehicle network. |
-| **PID: Get Temperature** | `uint8_t` | N/A | Config | Read / Write | LIN Protected ID for temperature requests. |
-| **PID: Get Configuration** | `uint8_t` | N/A | Config | Read / Write | LIN Protected ID for configuration requests. |
-| **PID: Set Configuration** | `uint8_t` | N/A | Config | Read / Write | LIN Protected ID for configuration updates. |
-| **ADC HW Config** | `uint8_t` | N/A | Config | Read / Write | Hardware ADC sample time & hardware accumulator averaging. |
-| **SW Filter Config** | `uint8_t` | N/A | Config | Read / Write | Software digital filtering algorithm & window depth. |
-| **Sensor Voltage Offset (`offset_mv`)** | `uint16_t` | Little-Endian | Config | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$. **Default: $500\,\text{mV}$**. |
-| **Calibration Gain (`gain_sens`)** | `uint32_t` | Little-Endian UQ16.16 | Config | Read / Write | Sensor transfer curve sensitivity in $\text{mV}/^\circ\text{C}$ in UQ16.16 format (**`0x000A0000` = Default $10.0\,\text{mV}/^\circ\text{C}$**). |
-| **Min Recorded Temperature** | `int16_t` | Little-Endian | Extremes | Read-Only | Lowest recorded temperature ($0.1^\circ\text{C}$). |
-| **Max Recorded Temperature** | `int16_t` | Little-Endian | Extremes | Read-Only | Highest recorded temperature ($0.1^\circ\text{C}$). |
+| **Magic Word** | `uint32_t` | Little-Endian | Config Block | Internal | Block integrity signature (`0xCFCFCF00`). |
+| **Factory Serial Number (SN)** | `uint32_t` | Little-Endian | TI Factory Region | Read-Only | Permanent unique hardware Trace ID from TI silicon (`DL_FactoryRegion_getTraceID()`). |
+| **Logical Node ID** | `uint32_t` | Little-Endian | Config Block | Read / Write | 32-bit system position / role ID in the vehicle network. |
+| **PID: Get Temperature** | `uint8_t` | N/A | Config Block | Read / Write | LIN Protected ID for temperature requests. |
+| **PID: Get Configuration** | `uint8_t` | N/A | Config Block | Read / Write | LIN Protected ID for configuration requests. |
+| **PID: Set Configuration** | `uint8_t` | N/A | Config Block | Read / Write | LIN Protected ID for configuration updates. |
+| **ADC HW Config** | `uint8_t` | N/A | Config Block | Read / Write | Hardware ADC sample time & hardware accumulator averaging. |
+| **SW Filter Config** | `uint8_t` | N/A | Config Block | Read / Write | Software digital filtering algorithm & window depth. |
+| **Sensor Voltage Offset (`offset_mv`)** | `uint16_t` | Little-Endian | Config Block | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$. **Default: $500\,\text{mV}$**. |
+| **Calibration Gain (`gain_sens`)** | `uint32_t` | Little-Endian UQ16.16 | Config Block | Read / Write | Sensor transfer curve sensitivity in $\text{mV}/^\circ\text{C}$ in UQ16.16 format (**`0x000A0000` = Default $10.0\,\text{mV}/^\circ\text{C}$**). |
+| **Min Recorded Temperature** | `int16_t` | Little-Endian | Config Block | Read-Only | Lowest recorded temperature ($0.1^\circ\text{C}$). |
+| **Max Recorded Temperature** | `int16_t` | Little-Endian | Config Block | Read-Only | Highest recorded temperature ($0.1^\circ\text{C}$). |
 
 ---
 
@@ -223,9 +223,9 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 ├──────────────┼──────────┼─────────────────────────────┼────────────────┤
 │ Sector 0..2  │ 0x000000 │ Firmware Program Code       │ 2.6 kB (Used)  │
 │ Sector 3..4  │ 0x000C00 │ Free Flash / Code Expansion │ 2.4 kB (Free)  │
-│ Sector 5     │ 0x001400 │ 1. Factory Block            │ 1 kB (Locked)  │
-│ Sector 6     │ 0x001800 │ 2. Configuration Block      │ 1 kB (R/W)     │
-│ Sector 7     │ 0x001C00 │ 3. Telemetry/Extremes Block │ 1 kB (R/W)     │
+│ Sector 5     │ 0x001400 │ Reserved (Formerly Factory) │ 1 kB (Free)    │
+│ Sector 6     │ 0x001800 │ Unified Configuration Block │ 1 kB (R/W)     │
+│ Sector 7     │ 0x001C00 │ Reserved                    │ 1 kB (Free)    │
 └──────────────┴──────────┴─────────────────────────────┴────────────────┘
 ```
 
@@ -234,54 +234,36 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 ```c
 #include <stdint.h>
 
-#define FLASH_FACTORY_MAGIC   (0xFAFAFAFA)
-#define FLASH_CONFIG_MAGIC    (0xC0C0C0C0)
-#define FLASH_EXTREMES_MAGIC  (0xECECECEC)
+#define CONFIG_MAGIC        (0xCFCFCF00U)
+#define CONFIG_BLOCK_ADDR   (0x00001800U)
 
-#define FLASH_FACTORY_ADDR    (0x00001400U)
-#define FLASH_CONFIG_ADDR     (0x00001800U)
-#define FLASH_EXTREMES_ADDR   (0x00001C00U)
-
-#define OFFSET_MV_DEFAULT     (500U)
-#define GAIN_SENS_DEFAULT     (0x000A0000U)
+#define OFFSET_MV_DEFAULT   (500U)
+#define GAIN_SENS_DEFAULT   (0x000A0000U) // 10.0 mV/deg C in UQ16.16
 
 /*
- * Block 1: Factory Production Block (Read-Only during normal operation)
+ * Unified User Configuration Block (Updated upon PID_SET_CONFIG or telemetry extreme write)
+ * Total size: 24 bytes (exactly three 64-bit ECC chunks)
  */
 typedef struct __attribute__((packed, aligned(8))) {
-    uint32_t magic;              // 0xFAFAFAFA
-    uint32_t factory_sn;         // Permanent Serial Number
-} FactoryBlock_t;
-
-/*
- * Block 2: User Configuration Block (Updated upon PID_SET_CONFIG)
- */
-typedef struct __attribute__((packed, aligned(8))) {
-    // 64-bit Chunk 1
-    uint32_t magic;              // 0xC0C0C0C0
+    // 64-bit Chunk 1 (8 bytes)
+    uint32_t magic;              // 0xCFCFCF00
     uint32_t logical_node_id;    // 32-bit system position ID
 
-    // 64-bit Chunk 2
+    // 64-bit Chunk 2 (8 bytes)
     uint16_t offset_mv;          // Offset in mV at 0 deg C (default 500 mV)
     uint32_t gain_sens;          // Sensitivity in UQ16.16 (0x000A0000 = 10.0 mV/deg C)
     uint8_t  pid_get_temp;       // Configured PID for temperature
     uint8_t  pid_get_config;     // Configured PID for read config
 
-    // 64-bit Chunk 3
+    // 64-bit Chunk 3 (8 bytes)
     uint8_t  pid_set_config;     // Configured PID for write config
     uint8_t  filter_hw_adc;      // ADC HW Averaging & Sample Time
     uint8_t  filter_sw_mode;     // SW Digital Filter mode
-    uint8_t  _padding[5];        // Pad to 24 bytes (multiple of 8 for Flash ECC)
+    int16_t  min_temp;           // Lowest recorded temperature (0.1 deg C)
+    int16_t  max_temp;           // Highest recorded temperature (0.1 deg C)
+    uint8_t  _padding[1];        // Pad to 24 bytes (multiple of 8 for Flash ECC)
 } ConfigBlock_t;
-
-/*
- * Block 3: Telemetry & Extremes Block (Updated dynamically based on write policy)
- */
-typedef struct __attribute__((packed, aligned(8))) {
-    uint32_t magic;              // 0xECECECEC
-    int16_t  min_temp;           // Lowest recorded temp (0.1 deg C)
-    int16_t  max_temp;           // Highest recorded temp (0.1 deg C)
-} ExtremesBlock_t;
+```
 ```
 
 ---

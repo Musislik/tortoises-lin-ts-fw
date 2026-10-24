@@ -51,38 +51,28 @@ This document defines the complete physical and logical memory architecture for 
 | **2** | `0x0000_0800` | `0x0000_0BFF` | 1 kB | `FLASH` | TI DriverLib + LIN communication handlers | Flashed with FW |
 | **3** | `0x0000_0C00` | `0x0000_0FFF` | 1 kB | `FLASH` | Code reserve / future feature expansion | Flashed with FW |
 | **4** | `0x0000_1000` | `0x0000_13FF` | 1 kB | `FLASH` | Code reserve (Upper limit of code `0x13FF`) | Flashed with FW |
-| **5** | `0x0000_1400` | `0x0000_17FF` | 1 kB | `FACTORY` | **Factory Production Block (`FactoryBlock_t`)** | Production only |
-| **6** | `0x0000_1800` | `0x0000_1BFF` | 1 kB | `CONFIG` | **User Configuration Block (`ConfigBlock_t`)** | Runtime via LIN |
-| **7** | `0x0000_1C00` | `0x0000_1FFF` | 1 kB | `EXTREMES` | **Telemetry & Extremes (`ExtremesBlock_t`)** | Runtime sensor loop |
+| **5** | `0x0000_1400` | `0x0000_17FF` | 1 kB | `RESERVED` | Reserved (Formerly Factory Block, now via TI Trace ID) | Unused |
+| **6** | `0x0000_1800` | `0x0000_1BFF` | 1 kB | `CONFIG` | **Unified Configuration Block (`ConfigBlock_t`)** | Runtime via LIN & Telemetry |
+| **7** | `0x0000_1C00` | `0x0000_1FFF` | 1 kB | `RESERVED` | Reserved (Extremes merged into Sector 6) | Unused |
 
 ---
 
 ## 3. Dedicated Flash Data Blocks Specification
 
-### 3.1 Sector 5: Factory Block (`FACTORY_BLOCK_ADDR = 0x0000_1400`)
+### 3.1 Hardware Silicon Serial Number (TI Factory Region)
 * **Purpose:** Permanent, hardware-locked manufacturing identification.
-* **Access Policy:** Read-only at runtime. Written once during production programming. Never erased by firmware.
-* **Layout (`FactoryBlock_t`, 8 bytes, 64-bit aligned):**
-  ```c
-  typedef struct __attribute__((packed, aligned(8))) {
-      uint32_t magic;      // 0xFAFAFAFA (FACTORY_MAGIC)
-      uint32_t factorySn;  // 32-bit unique serial number (Little-Endian)
-  } FactoryBlock_t;
-  ```
-* **Memory Offset Map:**
-  * `0x0000_1400`: `magic` (`0xFAFAFAFA`)
-  * `0x0000_1404`: `factorySn` (e.g. `0x00000001` -> bytes `01 00 00 00`)
-  * `0x0000_1408 .. 0x0000_17FF`: Reserved padding / future calibration tables (filled with `0xFF`).
+* **Storage:** Read directly from TI hardware register `FACTORYREGION->TRACEID` (`0x41C40000`) using DriverLib function `DL_FactoryRegion_getTraceID()`.
+* **Characteristics:** Unique 32-bit wafer/lot trace ID burned by TI during ATE testing. Requires zero Flash memory.
 
-### 3.2 Sector 6: User Configuration Block (`CONFIG_BLOCK_ADDR = 0x0000_1800`)
-* **Purpose:** Network node identity, sensor calibration, filter modes, and LIN PIDs.
-* **Access Policy:** Read/Write. Updated dynamically when valid `PID_SET_CONFIG` frame is received via LIN.
-* **Function Handler:** `configSaveUser()` erases Sector 6 and writes 24 bytes (three 64-bit ECC chunks).
+### 3.2 Sector 6: Unified Configuration & Extremes Block (`CONFIG_BLOCK_ADDR = 0x0000_1800`)
+* **Purpose:** Network node identity, sensor calibration, filter modes, LIN PIDs, and operational temperature extremes.
+* **Access Policy:** Read/Write. Updated dynamically when a valid `PID_SET_CONFIG` frame is received via LIN or when significant extremes are recorded.
+* **Function Handler:** `configSave()` erases Sector 6 and writes 24 bytes (three 64-bit ECC chunks).
 * **Layout (`ConfigBlock_t`, 24 bytes, 64-bit aligned):**
   ```c
   typedef struct __attribute__((packed, aligned(8))) {
       // Chunk 1 (8 bytes)
-      uint32_t magic;           // 0xC0C0C0C0 (CONFIG_MAGIC)
+      uint32_t magic;           // 0xCFCFCF00 (CONFIG_MAGIC)
       uint32_t logicalNodeId;   // 32-bit system node role / position ID
 
       // Chunk 2 (8 bytes)
@@ -95,21 +85,10 @@ This document defines the complete physical and logical memory architecture for 
       uint8_t  pidSetConfig;    // Configured LIN PID for configuration write
       uint8_t  filterHwAdc;     // ADC sample cycles & HW averaging
       uint8_t  filterSwMode;    // Digital filter mode (passthrough, MA, EMA)
-      uint8_t  _padding[5];     // Padding to maintain 8-byte ECC boundary
+      int16_t  minTemp;         // Lowest recorded temperature in 0.1 deg C units
+      int16_t  maxTemp;         // Highest recorded temperature in 0.1 deg C units
+      uint8_t  _padding[1];     // Padding to maintain 8-byte ECC boundary (Total 24 B)
   } ConfigBlock_t;
-  ```
-
-### 3.3 Sector 7: Telemetry & Extremes Block (`EXTREMES_BLOCK_ADDR = 0x0000_1C00`)
-* **Purpose:** Historical min/max recorded temperatures.
-* **Access Policy:** Read/Write. Managed by write-reduction logic in `telemetry.c` ($\Delta \ge 5.0^\circ\text{C}$ or 1-hour stability).
-* **Function Handler:** `configSaveExtremes()` erases Sector 7 and writes 8 bytes (one 64-bit ECC chunk).
-* **Layout (`ExtremesBlock_t`, 8 bytes, 64-bit aligned):**
-  ```c
-  typedef struct __attribute__((packed, aligned(8))) {
-      uint32_t magic;           // 0xECECECEC (EXTREMES_MAGIC)
-      int16_t  minTemp;         // Lowest temperature in 0.1 deg C units
-      int16_t  maxTemp;         // Highest temperature in 0.1 deg C units
-  } ExtremesBlock_t;
   ```
 
 ---

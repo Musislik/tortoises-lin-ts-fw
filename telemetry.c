@@ -15,13 +15,34 @@ static int16_t gLastCommittedMaxTemp = 0;
 static uint32_t settlingTimer = 0;
 static bool needsCommit = false;
 
+static bool commitExtremes(void) {
+    ConfigBlock_t newConfig = gActiveConfig;
+    newConfig.minTemp = gCurrentMinTemp;
+    newConfig.maxTemp = gCurrentMaxTemp;
+
+    if (configSave(&newConfig)) {
+        gLastCommittedMinTemp = gCurrentMinTemp;
+        gLastCommittedMaxTemp = gCurrentMaxTemp;
+        needsCommit = false;
+        return true;
+    }
+    return false;
+}
+
 void telemetryInit(void) {
-    gCurrentMinTemp = gActiveExtremes.minTemp;
-    gCurrentMaxTemp = gActiveExtremes.maxTemp;
+    gCurrentMinTemp = gActiveConfig.minTemp;
+    gCurrentMaxTemp = gActiveConfig.maxTemp;
     gLastCommittedMinTemp = gCurrentMinTemp;
     gLastCommittedMaxTemp = gCurrentMaxTemp;
     settlingTimer = 0;
     needsCommit = false;
+}
+
+void telemetryNotifyConfigSaved(void) {
+    gLastCommittedMinTemp = gCurrentMinTemp;
+    gLastCommittedMaxTemp = gCurrentMaxTemp;
+    needsCommit = false;
+    settlingTimer = 0;
 }
 
 void telemetryUpdate(int16_t newTemp) {
@@ -44,19 +65,12 @@ void telemetryUpdate(int16_t newTemp) {
         // Check if delta is significant enough to commit immediately.
         // We bypass the settling timer for large temperature jumps to guarantee that severe thermal 
         // events are permanently recorded in flash even if the device loses power abruptly right after.
-        int16_t minDelta = gLastCommittedMinTemp - gCurrentMinTemp;
-        int16_t maxDelta = gCurrentMaxTemp - gLastCommittedMaxTemp;
+        int32_t minDelta = (int32_t)gLastCommittedMinTemp - (int32_t)gCurrentMinTemp;
+        int32_t maxDelta = (int32_t)gCurrentMaxTemp - (int32_t)gLastCommittedMaxTemp;
         
         if (minDelta >= EXTREME_SIGNIFICANT_DELTA_X10 || maxDelta >= EXTREME_SIGNIFICANT_DELTA_X10) {
             // Immediate commit
-            ExtremesBlock_t newExt;
-            newExt.minTemp = gCurrentMinTemp;
-            newExt.maxTemp = gCurrentMaxTemp;
-            if (configSaveExtremes(&newExt)) {
-                gLastCommittedMinTemp = gCurrentMinTemp;
-                gLastCommittedMaxTemp = gCurrentMaxTemp;
-                needsCommit = false;
-            }
+            commitExtremes();
         }
     }
 }
@@ -67,13 +81,8 @@ void telemetryTick(void) {
         // in RAM until the temperature stabilizes, preventing excessive flash erase cycles.
         settlingTimer++;
         if (settlingTimer >= SETTLING_TIME_SEC) {
-            ExtremesBlock_t newExt;
-            newExt.minTemp = gCurrentMinTemp;
-            newExt.maxTemp = gCurrentMaxTemp;
-            if (configSaveExtremes(&newExt)) {
-                gLastCommittedMinTemp = gCurrentMinTemp;
-                gLastCommittedMaxTemp = gCurrentMaxTemp;
-                needsCommit = false;
+            if (commitExtremes()) {
+                // Extremes committed successfully
             } else {
                 // If save fails (e.g. flash controller busy), we back off by 1 second 
                 // and try again, ensuring the extreme is eventually committed.

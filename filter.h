@@ -48,9 +48,9 @@ int16_t calcTemperature(const uint32_t rawAdc);
  * lock mechanism will be reset via filterInit().
  *
  * @param swFilterConfig The software filter configuration mode.
- * @param offsetMv The voltage offset at 0 degrees C in mV.
+ * @param offsetMv The voltage offset at 0 degrees C in mV in Q16.16 format.
  * @param gainSens The gain sensitivity in UQ16.16 format (e.g. 0x000A0000 for 10.0 mV/degC).
  */
-void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const uint32_t gainSens);
+void setFilterConfig(const FilterSwMode_t swFilterConfig, const int32_t offsetMv, const uint32_t gainSens);
 
 #endif // FILTER_H

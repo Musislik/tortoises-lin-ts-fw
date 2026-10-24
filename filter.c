@@ -47,7 +47,7 @@ typedef enum {
 
 // Config variables
 static FilterSwMode_t config = FILTER_SW_MODE_PASSTHROUGH;
-static uint16_t calOffsetMv = 0;
+static int32_t calOffsetMv = 0;
 static uint32_t calGainSens = 0;
 
 static FilterLockState_t lockState = FILTER_STATE_INIT;
@@ -88,7 +88,7 @@ void filterInit(void) {
     lastFilteredOut = TEMP_INVALID_VALUE;
 }
 
-void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const uint32_t gainSens) {
+void setFilterConfig(const FilterSwMode_t swFilterConfig, const int32_t offsetMv, const uint32_t gainSens) {
     if (calOffsetMv != offsetMv || config != swFilterConfig || calGainSens != gainSens) {
         filterInit();
         calOffsetMv = offsetMv;
@@ -240,8 +240,8 @@ int16_t calcTemperature(const uint32_t rawAdc) {
     if (!isRawAdcValid(rawAdc)) {
         tempCx10 = TEMP_INVALID_VALUE;
     } else {
-        int32_t delta = (int32_t)rawAdc * ADC_SCALE_NUM - (int32_t)calOffsetMv * ADC_SCALE_DEN;
-        int64_t num = (int64_t)delta * (TEMP_CX10_MULTIPLIER * UQ16_16_SCALE);
+        int64_t deltaQ16 = (int64_t)rawAdc * (ADC_SCALE_NUM * UQ16_16_SCALE) - (int64_t)calOffsetMv * ADC_SCALE_DEN;
+        int64_t num = deltaQ16 * TEMP_CX10_MULTIPLIER;
         int64_t den = (int64_t)ADC_SCALE_DEN * calGainSens;
 
         if ((num < ((int64_t)TEMP_MIN_CX10 * den)) || (num > ((int64_t)TEMP_MAX_CX10 * den))) {

@@ -7,7 +7,7 @@
 #define CONFIG_BLOCK_ADDR   0x1800
 #define CONFIG_MAGIC        0xCFCFCF00
 
-#define OFFSET_MV_DEFAULT   500         // Default offset for TMP235 (500 mV)
+#define OFFSET_MV_DEFAULT   0x01F40000  // Default offset for TMP235 (500.0 mV in Q16.16)
 #define GAIN_SENS_DEFAULT   0x000A0000U // Default gain for TMP235 (10.0 mV/degC in UQ16.16)
 
 // PIDs baseline
@@ -21,7 +21,7 @@
 typedef struct __attribute__((packed, aligned(8))) {
     uint32_t magic;
     uint32_t logicalNodeId;
-    uint16_t offsetMv;
+    int32_t  offsetMv;
     uint32_t gainSens;
     uint8_t  pidGetTemp;
     uint8_t  pidGetConfig;
@@ -30,10 +30,10 @@ typedef struct __attribute__((packed, aligned(8))) {
     uint8_t  filterSwMode;
     int16_t  minTemp;
     int16_t  maxTemp;
-    uint8_t  _padding[1]; // Pad to 24 bytes (multiple of 8 for Flash ECC)
+    uint8_t  _padding[7]; // Pad to 32 bytes (multiple of 8 for Flash ECC)
 } ConfigBlock_t;
 
-_Static_assert(sizeof(ConfigBlock_t) == 24, "ConfigBlock_t must be exactly 24 bytes");
+_Static_assert(sizeof(ConfigBlock_t) == 32, "ConfigBlock_t must be exactly 32 bytes");
 
 extern ConfigBlock_t gActiveConfig;
 

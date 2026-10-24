@@ -24,9 +24,9 @@
 #define DELAY_STANDARD_CYCLES       240000
 
 #define LIN_TX_DATA_TEMP_LEN        3
-#define LIN_TX_DATA_CONFIG_LEN      20
-#define LIN_RX_DATA_CONFIG_LEN      16
-#define LIN_RX_CONFIG_PAYLOAD_LEN   15
+#define LIN_TX_DATA_CONFIG_LEN      22
+#define LIN_RX_DATA_CONFIG_LEN      18
+#define LIN_RX_CONFIG_PAYLOAD_LEN   17
 
 /**
  * @brief Checks if LIN is in a state expecting data.
@@ -322,32 +322,35 @@ void LIN_INST_IRQHandler(void) {
                     } else if (rxByte == gActiveConfig.pidGetConfig) {
                         sLinRxState = LIN_RX_STATE_IDLE;
                         
-                        // Populate 15 bytes of config + 4 bytes of factory SN
+                        // Populate 17 bytes of config + 4 bytes of factory SN
                         txBuffer[0] = (uint8_t)(gActiveConfig.logicalNodeId & 0xFF);
                         txBuffer[1] = (uint8_t)((gActiveConfig.logicalNodeId >> 8) & 0xFF);
                         txBuffer[2] = (uint8_t)((gActiveConfig.logicalNodeId >> 16) & 0xFF);
                         txBuffer[3] = (uint8_t)((gActiveConfig.logicalNodeId >> 24) & 0xFF);
+
                         txBuffer[4] = (uint8_t)(gActiveConfig.offsetMv & 0xFF);
                         txBuffer[5] = (uint8_t)((gActiveConfig.offsetMv >> 8) & 0xFF);
+                        txBuffer[6] = (uint8_t)((gActiveConfig.offsetMv >> 16) & 0xFF);
+                        txBuffer[7] = (uint8_t)((gActiveConfig.offsetMv >> 24) & 0xFF);
                         
-                        txBuffer[6] = (uint8_t)(gActiveConfig.gainSens & 0xFF);
-                        txBuffer[7] = (uint8_t)((gActiveConfig.gainSens >> 8) & 0xFF);
-                        txBuffer[8] = (uint8_t)((gActiveConfig.gainSens >> 16) & 0xFF);
-                        txBuffer[9] = (uint8_t)((gActiveConfig.gainSens >> 24) & 0xFF);
+                        txBuffer[8] = (uint8_t)(gActiveConfig.gainSens & 0xFF);
+                        txBuffer[9] = (uint8_t)((gActiveConfig.gainSens >> 8) & 0xFF);
+                        txBuffer[10] = (uint8_t)((gActiveConfig.gainSens >> 16) & 0xFF);
+                        txBuffer[11] = (uint8_t)((gActiveConfig.gainSens >> 24) & 0xFF);
                         
-                        txBuffer[10] = gActiveConfig.pidGetTemp;
-                        txBuffer[11] = gActiveConfig.pidGetConfig;
-                        txBuffer[12] = gActiveConfig.pidSetConfig;
-                        txBuffer[13] = gActiveConfig.filterHwAdc;
-                        txBuffer[14] = gActiveConfig.filterSwMode;
+                        txBuffer[12] = gActiveConfig.pidGetTemp;
+                        txBuffer[13] = gActiveConfig.pidGetConfig;
+                        txBuffer[14] = gActiveConfig.pidSetConfig;
+                        txBuffer[15] = gActiveConfig.filterHwAdc;
+                        txBuffer[16] = gActiveConfig.filterSwMode;
                         
                         uint32_t traceId = DL_FactoryRegion_getTraceID();
-                        txBuffer[15] = (uint8_t)(traceId & 0xFF);
-                        txBuffer[16] = (uint8_t)((traceId >> 8) & 0xFF);
-                        txBuffer[17] = (uint8_t)((traceId >> 16) & 0xFF);
-                        txBuffer[18] = (uint8_t)((traceId >> 24) & 0xFF);
+                        txBuffer[17] = (uint8_t)(traceId & 0xFF);
+                        txBuffer[18] = (uint8_t)((traceId >> 8) & 0xFF);
+                        txBuffer[19] = (uint8_t)((traceId >> 16) & 0xFF);
+                        txBuffer[20] = (uint8_t)((traceId >> 24) & 0xFF);
                         
-                        txBuffer[19] = calcChecksum(rxByte, txBuffer, 19);
+                        txBuffer[21] = calcChecksum(rxByte, txBuffer, 21);
                         
                         txBufferIx = 1;
                         txBufferLen = LIN_TX_DATA_CONFIG_LEN;
@@ -355,10 +358,10 @@ void LIN_INST_IRQHandler(void) {
                         DL_UART_Extend_transmitData(LIN_INST, txBuffer[0]);
                         DL_UART_Extend_enableInterrupt(LIN_INST, DL_UART_EXTEND_INTERRUPT_TX);
                     } else if (rxByte == gActiveConfig.pidSetConfig) {
-                        // We need to receive 13 bytes + checksum
+                        // We need to receive 17 bytes + checksum
                         sLinRxState = LIN_RX_STATE_RX_DATA;
                         rxBufferIx = 0;
-                        expectedRxLen = LIN_RX_DATA_CONFIG_LEN; // 13 data + 1 cs
+                        expectedRxLen = LIN_RX_DATA_CONFIG_LEN; // 17 data + 1 cs
                         activeRxPid = rxByte;
                     } else {
                         // Unrecognized PID: effectively filters out irrelevant bus traffic targeting 
@@ -377,17 +380,20 @@ void LIN_INST_IRQHandler(void) {
                         if (cs == rxBuffer[LIN_RX_CONFIG_PAYLOAD_LEN]) {
                             // Valid frame, parse it
                             ConfigBlock_t newConfig = gActiveConfig;
-                            newConfig.logicalNodeId = ((uint32_t)rxBuffer[3] << 24) | ((uint32_t)rxBuffer[2] << 16) | ((uint32_t)rxBuffer[1] << 8) | rxBuffer[0];
-                            newConfig.offsetMv = ((uint16_t)rxBuffer[5] << 8) | rxBuffer[4];
+                            newConfig.logicalNodeId = ((uint32_t)rxBuffer[3] << 24) | ((uint32_t)rxBuffer[2] << 16) |
+                                                      ((uint32_t)rxBuffer[1] << 8)  | rxBuffer[0];
+
+                            newConfig.offsetMv = (int32_t)(((uint32_t)rxBuffer[7] << 24) | ((uint32_t)rxBuffer[6] << 16) |
+                                                          ((uint32_t)rxBuffer[5] << 8)  | rxBuffer[4]);
                             
-                            newConfig.gainSens = ((uint32_t)rxBuffer[9] << 24) | ((uint32_t)rxBuffer[8] << 16) |
-                                                 ((uint32_t)rxBuffer[7] << 8)  | rxBuffer[6];
+                            newConfig.gainSens = ((uint32_t)rxBuffer[11] << 24) | ((uint32_t)rxBuffer[10] << 16) |
+                                                 ((uint32_t)rxBuffer[9] << 8)   | rxBuffer[8];
                             
-                            newConfig.pidGetTemp = rxBuffer[10];
-                            newConfig.pidGetConfig = rxBuffer[11];
-                            newConfig.pidSetConfig = rxBuffer[12];
-                            newConfig.filterHwAdc = rxBuffer[13];
-                            newConfig.filterSwMode = rxBuffer[14];
+                            newConfig.pidGetTemp = rxBuffer[12];
+                            newConfig.pidGetConfig = rxBuffer[13];
+                            newConfig.pidSetConfig = rxBuffer[14];
+                            newConfig.filterHwAdc = rxBuffer[15];
+                            newConfig.filterSwMode = rxBuffer[16];
                             
                             // Preserve active recorded extremes
                             newConfig.minTemp = gCurrentMinTemp;

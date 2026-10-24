@@ -31,6 +31,7 @@ This document defines the configuration parameters, memory layout, and LIN commu
 | **Calibration Gain (`gain_sens`)** | `uint32_t` | Little-Endian UQ16.16 | Config Block | Read / Write | Sensor transfer curve sensitivity in $\text{mV}/^\circ\text{C}$ in UQ16.16 format (**`0x000A0000` = Default $10.0\,\text{mV}/^\circ\text{C}$**). |
 | **Min Recorded Temperature** | `int16_t` | Little-Endian | Config Block | Read-Only | Lowest recorded temperature ($0.1^\circ\text{C}$). |
 | **Max Recorded Temperature** | `int16_t` | Little-Endian | Config Block | Read-Only | Highest recorded temperature ($0.1^\circ\text{C}$). |
+| **Block CRC-32** | `uint32_t` | Little-Endian | Config Block | Internal | CRC-32 integrity checksum over preceding 28 bytes. |
 
 ---
 
@@ -227,10 +228,8 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 │ Sector       │ Address  │ Block Content               │ Size & Status  │
 ├──────────────┼──────────┼─────────────────────────────┼────────────────┤
 │ Sector 0..2  │ 0x000000 │ Firmware Program Code       │ 2.6 kB (Used)  │
-│ Sector 3..4  │ 0x000C00 │ Free Flash / Code Expansion │ 2.4 kB (Free)  │
-│ Sector 5     │ 0x001400 │ Reserved (Formerly Factory) │ 1 kB (Free)    │
-│ Sector 6     │ 0x001800 │ Unified Configuration Block │ 1 kB (R/W)     │
-│ Sector 7     │ 0x001C00 │ Reserved                    │ 1 kB (Free)    │
+│ Sector 3..6  │ 0x000C00 │ Free Flash / Code Expansion │ 4.4 kB (Free)  │
+│ Sector 7     │ 0x001C00 │ Unified Configuration Block │ 1 kB (R/W)     │
 └──────────────┴──────────┴─────────────────────────────┴────────────────┘
 ```
 
@@ -240,7 +239,7 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 #include <stdint.h>
 
 #define CONFIG_MAGIC        (0xCFCFCF00U)
-#define CONFIG_BLOCK_ADDR   (0x00001800U)
+#define CONFIG_BLOCK_ADDR   (0x00001C00U)
 
 #define OFFSET_MV_DEFAULT   (0x01F40000U) // 500.0 mV in Q16.16
 #define GAIN_SENS_DEFAULT   (0x000A0000U) // 10.0 mV/deg C in UQ16.16
@@ -261,7 +260,8 @@ typedef struct __attribute__((packed, aligned(8))) {
     uint8_t  filter_sw_mode;     // SW Digital Filter mode
     int16_t  min_temp;           // Lowest recorded temperature (0.1 deg C)
     int16_t  max_temp;           // Highest recorded temperature (0.1 deg C)
-    uint8_t  _padding[7];        // Pad to 32 bytes (multiple of 8 for Flash ECC)
+    uint8_t  _padding[3];        // Alignment padding to 32-bit boundary
+    uint32_t crc;                // CRC-32 integrity checksum over preceding 28 bytes
 } ConfigBlock_t;
 ```
 ```

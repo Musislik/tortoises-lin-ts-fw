@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stddef.h>
 #include "ti_msp_dl_config.h"
 
 #define LOGICAL_NODE_ID_DEFAULT 1
@@ -14,9 +15,31 @@
 
 ConfigBlock_t gActiveConfig = {0};
 
+static uint32_t configCalculateCrc(const ConfigBlock_t *block) {
+    if (block == NULL) {
+        return 0;
+    }
+
+    const uint8_t *pData = (const uint8_t *)block;
+    uint32_t crc = 0xFFFFFFFFU;
+
+    for (size_t i = 0; i < offsetof(ConfigBlock_t, crc); i++) {
+        crc ^= pData[i];
+        for (uint8_t bit = 0; bit < 8; bit++) {
+            if (crc & 1U) {
+                crc = (crc >> 1U) ^ 0xEDB88320U;
+            } else {
+                crc >>= 1U;
+            }
+        }
+    }
+
+    return ~crc;
+}
+
 void configInit(void) {
     ConfigBlock_t *cb = (ConfigBlock_t *)CONFIG_BLOCK_ADDR;
-    if (cb->magic == CONFIG_MAGIC) {
+    if ((cb->magic == CONFIG_MAGIC) && (cb->crc == configCalculateCrc(cb))) {
         memcpy(&gActiveConfig, cb, sizeof(ConfigBlock_t));
     } else {
         // Load defaults as a safeguard against uninitialized or corrupted flash memory.
@@ -33,6 +56,7 @@ void configInit(void) {
         gActiveConfig.minTemp = MIN_TEMP_DEFAULT;
         gActiveConfig.maxTemp = MAX_TEMP_DEFAULT;
         memset(gActiveConfig._padding, 0xFF, sizeof(gActiveConfig._padding));
+        gActiveConfig.crc = configCalculateCrc(&gActiveConfig);
 
         // Persist default configuration to flash on first boot so that subsequent
         // boots find a valid magic signature and the sector is permanently provisioned.
@@ -49,11 +73,15 @@ bool configSave(const ConfigBlock_t *newConfig) {
         return false;
     }
 
-    // Copy to active config to apply immediately.
+    // Copy to active config to apply immediately (guarding against self-memcpy).
     // We update the active RAM struct before programming flash so that the system immediately 
     // uses the new parameters (e.g. LIN PIDs) even while the slower flash write operation is ongoing.
-    memcpy(&gActiveConfig, newConfig, sizeof(ConfigBlock_t));
+    if (newConfig != &gActiveConfig) {
+        memcpy(&gActiveConfig, newConfig, sizeof(ConfigBlock_t));
+    }
     gActiveConfig.magic = CONFIG_MAGIC; // Ensure magic is right
+    memset(gActiveConfig._padding, 0xFF, sizeof(gActiveConfig._padding));
+    gActiveConfig.crc = configCalculateCrc(&gActiveConfig);
 
     // Program 64-bit blocks
     uint32_t *dataPtr = (uint32_t *)&gActiveConfig;

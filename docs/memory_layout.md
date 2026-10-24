@@ -82,7 +82,8 @@ This document defines the complete physical and logical memory architecture for 
       uint8_t  filterSwMode;    // Digital filter mode (passthrough, MA, EMA)
       int16_t  minTemp;         // Lowest recorded temperature in 0.1 deg C units
       int16_t  maxTemp;         // Highest recorded temperature in 0.1 deg C units
-      uint8_t  _padding[7];     // Padding to maintain 8-byte ECC boundary (Total 32 B)
+      uint8_t  _padding[3];     // Padding to maintain 32-bit alignment
+      uint32_t crc;             // CRC-32 checksum calculated over preceding 28 bytes (Total 32 B)
   } ConfigBlock_t;
   ```
 

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #define CONFIG_BLOCK_ADDR   0x1C00
 #define CONFIG_MAGIC        0xCFCFCF00
@@ -30,10 +31,12 @@ typedef struct __attribute__((packed, aligned(8))) {
     uint8_t  filterSwMode;
     int16_t  minTemp;
     int16_t  maxTemp;
-    uint8_t  _padding[7]; // Pad to 32 bytes (multiple of 8 for Flash ECC)
+    uint8_t  _padding[3]; // Pad to maintain 32-bit alignment for CRC
+    uint32_t crc;         // CRC-32 integrity checksum over preceding bytes
 } ConfigBlock_t;
 
 _Static_assert(sizeof(ConfigBlock_t) == 32, "ConfigBlock_t must be exactly 32 bytes");
+_Static_assert(offsetof(ConfigBlock_t, crc) == 28, "ConfigBlock_t crc must be at offset 28");
 
 extern ConfigBlock_t gActiveConfig;
 

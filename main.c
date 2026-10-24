@@ -235,8 +235,7 @@ int main(void) {
         if (gFlagAdcReady) {
             gFlagAdcReady = false;
             
-            float voltageMv = adcRawToMv(gRawAdc);
-            int16_t temp = calcTemperature(voltageMv);
+            int16_t temp = calcTemperature(gRawAdc);
             
             // Atomic update of global temp for LIN ISR
             __disable_irq();
@@ -325,12 +324,10 @@ void LIN_INST_IRQHandler(void) {
                         txBuffer[4] = (uint8_t)(gActiveConfig.offsetMv & 0xFF);
                         txBuffer[5] = (uint8_t)((gActiveConfig.offsetMv >> 8) & 0xFF);
                         
-                        uint32_t gainBits;
-                        memcpy(&gainBits, &gActiveConfig.gainSens, sizeof(gainBits));
-                        txBuffer[6] = (uint8_t)(gainBits & 0xFF);
-                        txBuffer[7] = (uint8_t)((gainBits >> 8) & 0xFF);
-                        txBuffer[8] = (uint8_t)((gainBits >> 16) & 0xFF);
-                        txBuffer[9] = (uint8_t)((gainBits >> 24) & 0xFF);
+                        txBuffer[6] = (uint8_t)(gActiveConfig.gainSens & 0xFF);
+                        txBuffer[7] = (uint8_t)((gActiveConfig.gainSens >> 8) & 0xFF);
+                        txBuffer[8] = (uint8_t)((gActiveConfig.gainSens >> 16) & 0xFF);
+                        txBuffer[9] = (uint8_t)((gActiveConfig.gainSens >> 24) & 0xFF);
                         
                         txBuffer[10] = gActiveConfig.pidGetTemp;
                         txBuffer[11] = gActiveConfig.pidGetConfig;
@@ -376,8 +373,8 @@ void LIN_INST_IRQHandler(void) {
                             newConfig.logicalNodeId = ((uint32_t)rxBuffer[3] << 24) | ((uint32_t)rxBuffer[2] << 16) | ((uint32_t)rxBuffer[1] << 8) | rxBuffer[0];
                             newConfig.offsetMv = ((uint16_t)rxBuffer[5] << 8) | rxBuffer[4];
                             
-                            uint32_t gainBits = ((uint32_t)rxBuffer[9] << 24) | ((uint32_t)rxBuffer[8] << 16) | ((uint32_t)rxBuffer[7] << 8) | rxBuffer[6];
-                            memcpy(&newConfig.gainSens, &gainBits, sizeof(newConfig.gainSens));
+                            newConfig.gainSens = ((uint32_t)rxBuffer[9] << 24) | ((uint32_t)rxBuffer[8] << 16) |
+                                                 ((uint32_t)rxBuffer[7] << 8)  | rxBuffer[6];
                             
                             newConfig.pidGetTemp = rxBuffer[10];
                             newConfig.pidGetConfig = rxBuffer[11];

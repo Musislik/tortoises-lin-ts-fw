@@ -15,10 +15,10 @@
 /**
  * @brief Converts a raw ADC reading to voltage in millivolts.
  * @param raw The raw ADC value.
- * @return The corresponding voltage in millivolts.
+ * @return The corresponding voltage in millivolts (rounded to nearest).
  */
-static inline float adcRawToMv(uint32_t raw) {
-    return (float)((float)raw * ADC_VREF_MV) / ADC_MAX_VAL;
+static inline uint32_t adcRawToMv(uint32_t raw) {
+    return (raw * ADC_VREF_MV + (ADC_MAX_VAL / 2)) / ADC_MAX_VAL;
 }
 
 /**

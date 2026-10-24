@@ -6,11 +6,38 @@
 #define MA_SAMPLES_8  8
 #define MA_SAMPLES_16 16
 #define MAX_MA_SAMPLES MA_SAMPLES_16
-#define HW_VOLTAGE_MIN_MV 50.0f
-#define HW_VOLTAGE_MAX_MV 3250.0f
-#define TEMP_MIN_CX10 -400
-#define TEMP_MAX_CX10 1500
-#define TEMP_CX10_MULTIPLIER 10.0f
+
+/**
+ * Scaled voltage conversion constants:
+ * Ratio of ADC reference voltage (3300 mV) to 12-bit full-scale (4095)
+ * reduced by GCD(3300, 4095) = 15:
+ *   3300 / 15 = 220
+ *   4095 / 15 = 273
+ * Using this exact reduced fraction (220 / 273) preserves 100% mathematical precision
+ * while preventing 32-bit overflow in intermediate delta calculations.
+ */
+#define ADC_SCALE_NUM 220
+#define ADC_SCALE_DEN 273
+
+/**
+ * Hardware voltage validation bounds for sensor integrity:
+ * Nominal sensor output voltage must be within [50 mV, 3250 mV] to reject
+ * disconnected wires, broken sensor ICs, or rail-to-rail shorts.
+ *
+ * Converted to compile-time 12-bit ADC raw thresholds (Vref = 3300 mV, Max = 4095):
+ *   raw_min = ceil(50 mV * 4095 / 3300 mV)   = ceil(62.045)   = 63
+ *   raw_max = floor(3250 mV * 4095 / 3300 mV) = floor(4032.955) = 4032
+ *
+ * Precomputing compile-time constants eliminates runtime multiplication in the hot path
+ * and protects against potential integer overflow if an out-of-range value is supplied.
+ */
+#define HW_ADC_MIN_RAW 63U
+#define HW_ADC_MAX_RAW 4032U
+
+#define TEMP_MIN_CX10        (-400)
+#define TEMP_MAX_CX10        (1500)
+#define TEMP_CX10_MULTIPLIER INT64_C(10)
+#define UQ16_16_SCALE        INT64_C(65536)
 
 // State for spike rejection and HW validation
 typedef enum {
@@ -21,7 +48,7 @@ typedef enum {
 // Config variables
 static FilterSwMode_t config = FILTER_SW_MODE_PASSTHROUGH;
 static uint16_t calOffsetMv = 0;
-static float calGainSens = 0.0f;
+static uint32_t calGainSens = 0;
 
 static FilterLockState_t lockState = FILTER_STATE_INIT;
 static uint8_t startupCount = 0;
@@ -39,8 +66,8 @@ static int16_t emaState = 0;
 static bool emaInitialized = false;
 
 
-static bool isVoltageValid(const float voltageMv) {
-    if (voltageMv >= HW_VOLTAGE_MIN_MV && voltageMv <= HW_VOLTAGE_MAX_MV) {
+static bool isRawAdcValid(const uint32_t rawAdc) {
+    if ((rawAdc >= HW_ADC_MIN_RAW) && (rawAdc <= HW_ADC_MAX_RAW)) {
         return true;
     }
     return false;
@@ -61,10 +88,8 @@ void filterInit(void) {
     lastFilteredOut = TEMP_INVALID_VALUE;
 }
 
-void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const float gainSens) {
-    if (calOffsetMv != offsetMv || config != swFilterConfig || 
-        (calGainSens - gainSens > 0.0001f || calGainSens - gainSens < -0.0001f)) 
-    {
+void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const uint32_t gainSens) {
+    if (calOffsetMv != offsetMv || config != swFilterConfig || calGainSens != gainSens) {
         filterInit();
         calOffsetMv = offsetMv;
         calGainSens = gainSens;
@@ -205,23 +230,28 @@ static int16_t filterProcess(int16_t rawTempCx10) {
 }
 
 
-int16_t calcTemperature(const float voltageMv) {
-    if (calGainSens < 0.0001f && calGainSens > -0.0001f) {
+int16_t calcTemperature(const uint32_t rawAdc) {
+    if (calGainSens == 0) {
         return TEMP_INVALID_VALUE;
     }
 
     int16_t tempCx10 = TEMP_INVALID_VALUE;
     
-    if (!isVoltageValid(voltageMv)) {
+    if (!isRawAdcValid(rawAdc)) {
         tempCx10 = TEMP_INVALID_VALUE;
     } else {
-        float diffMv = voltageMv - calOffsetMv;
-        float tempCx10_f = (diffMv / calGainSens) * TEMP_CX10_MULTIPLIER;
+        int32_t delta = (int32_t)rawAdc * ADC_SCALE_NUM - (int32_t)calOffsetMv * ADC_SCALE_DEN;
+        int64_t num = (int64_t)delta * (TEMP_CX10_MULTIPLIER * UQ16_16_SCALE);
+        int64_t den = (int64_t)ADC_SCALE_DEN * calGainSens;
 
-        if (tempCx10_f < (float)TEMP_MIN_CX10 || tempCx10_f > (float)TEMP_MAX_CX10) {
+        if ((num < ((int64_t)TEMP_MIN_CX10 * den)) || (num > ((int64_t)TEMP_MAX_CX10 * den))) {
             tempCx10 = TEMP_INVALID_VALUE;
         } else {
-            tempCx10 = (int16_t)(tempCx10_f + (tempCx10_f >= 0.0f ? 0.5f : -0.5f));
+            if (num >= 0) {
+                tempCx10 = (int16_t)((num + (den / 2)) / den);
+            } else {
+                tempCx10 = (int16_t)((num - (den / 2)) / den);
+            }
         }
     }
 

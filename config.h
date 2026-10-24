@@ -12,8 +12,8 @@
 #define CONFIG_MAGIC   0xCFCFCF00
 #define EXTREMES_MAGIC 0xECECEC00
 
-#define OFFSET_MV_DEFAULT 500 //    Default offset for TMP235
-#define GAIN_SENS_DEFAULT 10.0f //  Default gain for TMP235 (10.0 mV/degC)
+#define OFFSET_MV_DEFAULT 500         // Default offset for TMP235 (500 mV)
+#define GAIN_SENS_DEFAULT 0x000A0000U // Default gain for TMP235 (10.0 mV/degC in UQ16.16)
 
 // PIDs baseline
 #define PID_GET_TEMP_DEFAULT   0x20
@@ -35,7 +35,7 @@ typedef struct __attribute__((packed, aligned(8))) {
     uint32_t magic;
     uint32_t logicalNodeId;
     uint16_t offsetMv;
-    float gainSens;
+    uint32_t gainSens;
     uint8_t pidGetTemp;
     uint8_t pidGetConfig;
     uint8_t pidSetConfig;

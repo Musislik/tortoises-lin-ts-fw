@@ -29,15 +29,16 @@ typedef enum {
 void filterInit(void);
 
 /**
- * @brief Calculate the temperature in 0.1 deg C from a voltage value.
+ * @brief Calculate the temperature in 0.1 deg C from a raw ADC reading.
  *
- * Internally applies the configured software filter (Moving Average or EMA),
- * then performs a two-point calibration linear conversion based on stored flash parameters.
+ * Internally performs a two-point calibration linear conversion using fixed-point
+ * UQ16.16 arithmetic based on stored flash parameters, then applies the configured 
+ * software filter (Moving Average or EMA).
  *
- * @param voltageMv The measured voltage in mV.
+ * @param rawAdc The raw ADC measurement.
  * @return The calculated temperature in 0.1 deg C units, or INT16_MAX on error.
  */
-int16_t calcTemperature(const float voltageMv);
+int16_t calcTemperature(const uint32_t rawAdc);
 
 /**
  * @brief Set the configuration parameters for the filter module.
@@ -48,8 +49,8 @@ int16_t calcTemperature(const float voltageMv);
  *
  * @param swFilterConfig The software filter configuration mode.
  * @param offsetMv The voltage offset at 0 degrees C in mV.
- * @param gainSens The gain sensitivity in mv/degC.
+ * @param gainSens The gain sensitivity in UQ16.16 format (e.g. 0x000A0000 for 10.0 mV/degC).
  */
-void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const float gainSens);
+void setFilterConfig(const FilterSwMode_t swFilterConfig, const uint16_t offsetMv, const uint32_t gainSens);
 
 #endif // FILTER_H

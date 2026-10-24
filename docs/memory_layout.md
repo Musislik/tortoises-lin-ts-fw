@@ -67,27 +67,22 @@ This document defines the complete physical and logical memory architecture for 
 ### 3.2 Sector 6: Unified Configuration & Extremes Block (`CONFIG_BLOCK_ADDR = 0x0000_1800`)
 * **Purpose:** Network node identity, sensor calibration, filter modes, LIN PIDs, and operational temperature extremes.
 * **Access Policy:** Read/Write. Updated dynamically when a valid `PID_SET_CONFIG` frame is received via LIN or when significant extremes are recorded.
-* **Function Handler:** `configSave()` erases Sector 6 and writes 24 bytes (three 64-bit ECC chunks).
-* **Layout (`ConfigBlock_t`, 24 bytes, 64-bit aligned):**
+* **Function Handler:** `configSave()` erases Sector 6 and writes 32 bytes (four 64-bit ECC chunks).
+* **Layout (`ConfigBlock_t`, 32 bytes, 64-bit aligned):**
   ```c
   typedef struct __attribute__((packed, aligned(8))) {
-      // Chunk 1 (8 bytes)
       uint32_t magic;           // 0xCFCFCF00 (CONFIG_MAGIC)
       uint32_t logicalNodeId;   // 32-bit system node role / position ID
-
-      // Chunk 2 (8 bytes)
-      uint16_t offsetMv;        // Sensor voltage at 0 deg C in mV (e.g. 500)
+      int32_t  offsetMv;        // Sensor voltage at 0 deg C in mV in Q16.16 (e.g. 0x01F40000 = 500.0 mV)
       uint32_t gainSens;        // Sensitivity in UQ16.16 (e.g. 0x000A0000 = 10.0 mV/deg C)
       uint8_t  pidGetTemp;      // Configured LIN PID for temperature query
       uint8_t  pidGetConfig;    // Configured LIN PID for configuration read
-
-      // Chunk 3 (8 bytes)
       uint8_t  pidSetConfig;    // Configured LIN PID for configuration write
       uint8_t  filterHwAdc;     // ADC sample cycles & HW averaging
       uint8_t  filterSwMode;    // Digital filter mode (passthrough, MA, EMA)
       int16_t  minTemp;         // Lowest recorded temperature in 0.1 deg C units
       int16_t  maxTemp;         // Highest recorded temperature in 0.1 deg C units
-      uint8_t  _padding[1];     // Padding to maintain 8-byte ECC boundary (Total 24 B)
+      uint8_t  _padding[7];     // Padding to maintain 8-byte ECC boundary (Total 32 B)
   } ConfigBlock_t;
   ```
 

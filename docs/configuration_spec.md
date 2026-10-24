@@ -9,9 +9,9 @@ This document defines the configuration parameters, memory layout, and LIN commu
 - **Checksum Model:** **Enhanced Checksum only** (PID included in the checksum calculation over the entire payload).
 - **Endianness:** **Little-Endian (LSB first)** for all multi-byte values (`uint16_t`, `int16_t`, `uint32_t`).
 - **Hardware Serial Number:** Read directly at runtime from TI Factory Region via DriverLib (`DL_FactoryRegion_getTraceID()`).
-- **Memory Architecture:** Parameters and operational extremes are unified into a **single Flash memory block** (Sector 6, 24 bytes, 64-bit aligned for hardware ECC):
+- **Memory Architecture:** Parameters and operational extremes are unified into a **single Flash memory block** (Sector 6, 32 bytes, 64-bit aligned for hardware ECC):
   1. **TI Factory Region (`0x41C40000`, Hardware Read-Only):** Holds unique silicon wafer/die Trace ID. Read dynamically on boot / request.
-  2. **Unified Configuration Block (Sector 6, `0x1800`, Read/Write):** Holds user/network configuration and operational extremes (Min/Max recorded temperatures) in a single 24-byte block.
+  2. **Unified Configuration Block (Sector 6, `0x1800`, Read/Write):** Holds user/network configuration and operational extremes (Min/Max recorded temperatures) in a single 32-byte block.
 
 ---
 
@@ -27,7 +27,7 @@ This document defines the configuration parameters, memory layout, and LIN commu
 | **PID: Set Configuration** | `uint8_t` | N/A | Config Block | Read / Write | LIN Protected ID for configuration updates. |
 | **ADC HW Config** | `uint8_t` | N/A | Config Block | Read / Write | Hardware ADC sample time & hardware accumulator averaging. |
 | **SW Filter Config** | `uint8_t` | N/A | Config Block | Read / Write | Software digital filtering algorithm & window depth. |
-| **Sensor Voltage Offset (`offset_mv`)** | `uint16_t` | Little-Endian | Config Block | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$. **Default: $500\,\text{mV}$**. |
+| **Sensor Voltage Offset (`offset_mv`)** | `int32_t` | Little-Endian Q16.16 | Config Block | Read / Write | Nominal voltage at $0^\circ\text{C}$ in $\text{mV}$ in signed Q16.16 format. **Default: $500.0\,\text{mV}$ (`0x01F40000`)**. |
 | **Calibration Gain (`gain_sens`)** | `uint32_t` | Little-Endian UQ16.16 | Config Block | Read / Write | Sensor transfer curve sensitivity in $\text{mV}/^\circ\text{C}$ in UQ16.16 format (**`0x000A0000` = Default $10.0\,\text{mV}/^\circ\text{C}$**). |
 | **Min Recorded Temperature** | `int16_t` | Little-Endian | Config Block | Read-Only | Lowest recorded temperature ($0.1^\circ\text{C}$). |
 | **Max Recorded Temperature** | `int16_t` | Little-Endian | Config Block | Read-Only | Highest recorded temperature ($0.1^\circ\text{C}$). |
@@ -43,9 +43,9 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
              <───── Temperature (2B) + CS ──────────── [Sensor]
 
 [LIN Master] ────── Header (PID_GET_CONFIG) ─────────> [Sensor]
-             <───── Extended Config (19B) + CS ─────── [Sensor]
+             <───── Extended Config (21B) + CS ─────── [Sensor]
 
-[LIN Master] ────── Header + New Config (15B) + CS ──> [Sensor]
+[LIN Master] ────── Header + New Config (17B) + CS ──> [Sensor]
              (Sensor updates RAM & commits to Config Flash block)
 ```
 
@@ -69,7 +69,7 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 
 ### 3.2. `PID_GET_CONFIG` (Configuration Read)
 - **Publisher:** Sensor (Slave)
-- **Payload Length:** 19 Data Bytes + Enhanced Checksum (20 Bytes Total)
+- **Payload Length:** 21 Data Bytes + Enhanced Checksum (22 Bytes Total)
 - **Purpose:** Returns the complete active configuration and Factory SN in a single frame.
 
 | Byte | Field | Type | Description |
@@ -78,28 +78,30 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 | **1** | `Logical_Node_ID_B1` | `uint8_t` | Logical Node ID (Byte 1). |
 | **2** | `Logical_Node_ID_B2` | `uint8_t` | Logical Node ID (Byte 2). |
 | **3** | `Logical_Node_ID_B3` | `uint8_t` | Logical Node ID (Byte 3, MSB). |
-| **4** | `Offset_mV_LSB`      | `uint8_t` | Sensor Voltage Offset at $0^\circ\text{C}$ in $\text{mV}$ (LSB). |
-| **5** | `Offset_mV_MSB`      | `uint8_t` | Sensor Voltage Offset at $0^\circ\text{C}$ in $\text{mV}$ (MSB, Default $500\,\text{mV}$). |
-| **6** | `Cal_Gain_B0`        | `uint8_t` | Sensitivity UQ16.16 Byte 0 (LSB). |
-| **7** | `Cal_Gain_B1`        | `uint8_t` | Sensitivity UQ16.16 Byte 1. |
-| **8** | `Cal_Gain_B2`        | `uint8_t` | Sensitivity UQ16.16 Byte 2. |
-| **9** | `Cal_Gain_B3`        | `uint8_t` | Sensitivity UQ16.16 Byte 3 (MSB, `0x000A0000` = Default $10.0\,\text{mV}/^\circ\text{C}$). |
-| **10**| `PID_Get_Temp`       | `uint8_t` | Active PID for temperature requests. |
-| **11**| `PID_Get_Config`     | `uint8_t` | Active PID for configuration read requests. |
-| **12**| `PID_Set_Config`     | `uint8_t` | Active PID for configuration write requests. |
-| **13**| `ADC_HW_Config`      | `uint8_t` | ADC HW sample time & hardware accumulator. |
-| **14**| `SW_Filter_Config`   | `uint8_t` | SW digital filter mode. |
-| **15**| `Factory_SN_B0`      | `uint8_t` | Factory Serial Number (Byte 0, LSB). |
-| **16**| `Factory_SN_B1`      | `uint8_t` | Factory Serial Number (Byte 1). |
-| **17**| `Factory_SN_B2`      | `uint8_t` | Factory Serial Number (Byte 2). |
-| **18**| `Factory_SN_B3`      | `uint8_t` | Factory Serial Number (Byte 3, MSB). |
-| **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..18). |
+| **4** | `Offset_mV_B0`        | `uint8_t` | Sensor Voltage Offset in $\text{mV}$ Q16.16 (Byte 0, LSB). |
+| **5** | `Offset_mV_B1`        | `uint8_t` | Sensor Voltage Offset in $\text{mV}$ Q16.16 (Byte 1). |
+| **6** | `Offset_mV_B2`        | `uint8_t` | Sensor Voltage Offset in $\text{mV}$ Q16.16 (Byte 2). |
+| **7** | `Offset_mV_B3`        | `uint8_t` | Sensor Voltage Offset in $\text{mV}$ Q16.16 (Byte 3, MSB, Default $500.0\,\text{mV} = \text{0x01F40000}$). |
+| **8** | `Cal_Gain_B0`        | `uint8_t` | Sensitivity UQ16.16 Byte 0 (LSB). |
+| **9** | `Cal_Gain_B1`        | `uint8_t` | Sensitivity UQ16.16 Byte 1. |
+| **10**| `Cal_Gain_B2`        | `uint8_t` | Sensitivity UQ16.16 Byte 2. |
+| **11**| `Cal_Gain_B3`        | `uint8_t` | Sensitivity UQ16.16 Byte 3 (MSB, `0x000A0000` = Default $10.0\,\text{mV}/^\circ\text{C}$). |
+| **12**| `PID_Get_Temp`       | `uint8_t` | Active PID for temperature requests. |
+| **13**| `PID_Get_Config`     | `uint8_t` | Active PID for configuration read requests. |
+| **14**| `PID_Set_Config`     | `uint8_t` | Active PID for configuration write requests. |
+| **15**| `ADC_HW_Config`      | `uint8_t` | ADC HW sample time & hardware accumulator. |
+| **16**| `SW_Filter_Config`   | `uint8_t` | SW digital filter mode. |
+| **17**| `Factory_SN_B0`      | `uint8_t` | Factory Serial Number (Byte 0, LSB). |
+| **18**| `Factory_SN_B1`      | `uint8_t` | Factory Serial Number (Byte 1). |
+| **19**| `Factory_SN_B2`      | `uint8_t` | Factory Serial Number (Byte 2). |
+| **20**| `Factory_SN_B3`      | `uint8_t` | Factory Serial Number (Byte 3, MSB). |
+| **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..20). |
 
 ---
 
 ### 3.3. `PID_SET_CONFIG` (Write Configuration)
 - **Publisher:** Master
-- **Payload Length:** 15 Data Bytes + Enhanced Checksum (16 Bytes Total)
+- **Payload Length:** 17 Data Bytes + Enhanced Checksum (18 Bytes Total)
 - **Purpose:** Transmits new configuration parameters. Sensor updates RAM and commits to Flash Sector 6.
 
 | Byte | Field | Type | Description |
@@ -108,28 +110,31 @@ All multi-byte fields are transmitted in **Little-Endian** format (Low byte firs
 | **1** | `Logical_Node_ID_B1` | `uint8_t` | New Logical Node ID (Byte 1). |
 | **2** | `Logical_Node_ID_B2` | `uint8_t` | New Logical Node ID (Byte 2). |
 | **3** | `Logical_Node_ID_B3` | `uint8_t` | New Logical Node ID (Byte 3, MSB). |
-| **4** | `Offset_mV_LSB`      | `uint8_t` | New Offset Voltage in $\text{mV}$ (LSB). |
-| **5** | `Offset_mV_MSB`      | `uint8_t` | New Offset Voltage in $\text{mV}$ (MSB, Default $500\,\text{mV}$). |
-| **6** | `Cal_Gain_B0`        | `uint8_t` | New Sensitivity UQ16.16 Byte 0 (LSB). |
-| **7** | `Cal_Gain_B1`        | `uint8_t` | New Sensitivity UQ16.16 Byte 1. |
-| **8** | `Cal_Gain_B2`        | `uint8_t` | New Sensitivity UQ16.16 Byte 2. |
-| **9** | `Cal_Gain_B3`        | `uint8_t` | New Sensitivity UQ16.16 Byte 3 (MSB). |
-| **10**| `PID_Get_Temp`       | `uint8_t` | New PID for temperature requests. |
-| **11**| `PID_Get_Config`     | `uint8_t` | New PID for configuration read requests. |
-| **12**| `PID_Set_Config`     | `uint8_t` | New PID for configuration write requests. |
-| **13**| `ADC_HW_Config`      | `uint8_t` | New ADC HW sample time & averaging settings. |
-| **14**| `SW_Filter_Config`   | `uint8_t` | New SW digital filter mode. |
-| **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..14). |
+| **4** | `Offset_mV_B0`        | `uint8_t` | New Offset Voltage in $\text{mV}$ Q16.16 (Byte 0, LSB). |
+| **5** | `Offset_mV_B1`        | `uint8_t` | New Offset Voltage in $\text{mV}$ Q16.16 (Byte 1). |
+| **6** | `Offset_mV_B2`        | `uint8_t` | New Offset Voltage in $\text{mV}$ Q16.16 (Byte 2). |
+| **7** | `Offset_mV_B3`        | `uint8_t` | New Offset Voltage in $\text{mV}$ Q16.16 (Byte 3, MSB, Default $500.0\,\text{mV} = \text{0x01F40000}$). |
+| **8** | `Cal_Gain_B0`        | `uint8_t` | New Sensitivity UQ16.16 Byte 0 (LSB). |
+| **9** | `Cal_Gain_B1`        | `uint8_t` | New Sensitivity UQ16.16 Byte 1. |
+| **10**| `Cal_Gain_B2`        | `uint8_t` | New Sensitivity UQ16.16 Byte 2. |
+| **11**| `Cal_Gain_B3`        | `uint8_t` | New Sensitivity UQ16.16 Byte 3 (MSB). |
+| **12**| `PID_Get_Temp`       | `uint8_t` | New PID for temperature requests. |
+| **13**| `PID_Get_Config`     | `uint8_t` | New PID for configuration read requests. |
+| **14**| `PID_Set_Config`     | `uint8_t` | New PID for configuration write requests. |
+| **15**| `ADC_HW_Config`      | `uint8_t` | New ADC HW sample time & averaging settings. |
+| **16**| `SW_Filter_Config`   | `uint8_t` | New SW digital filter mode. |
+| **CS**| `Checksum`           | `uint8_t` | Enhanced Checksum (PID + Bytes 0..16). |
 
 ---
 
 ## 4. Measurement & Calibration Mathematical Model
 
 ### 4.1. Voltage Offset & Default Sentinel Rule
-The nominal sensor output voltage at $0^\circ\text{C}$ is configurable via `offset_mv`.
-Because valid sensor output voltages can legitimately be $0\,\text{mV}$ (e.g. for LM35), **`0` is a valid custom value and NOT the default sentinel**.
-- **Default Sentinel:** The maximum value of `uint16_t` (`0xFFFF` = $65535$).
-- When `offset_mv == 0xFFFF`, the firmware uses the **default $500\,\text{mV}$** baseline (MCP9700/TMP36).
+The nominal sensor output voltage at $0^\circ\text{C}$ is configurable via `offset_mv` in **signed Q16.16 format** ($V_{\text{actual}} = \text{offset\_mv} / 65536\,\text{mV}$):
+- **Resolution:** $1 / 65536\,\text{mV} \approx 15.26\,\mu\text{V}$.
+- Because valid sensor output voltages can legitimately be $0\,\text{mV}$ (e.g. for LM35), **`0` is a valid custom value and NOT the default sentinel**.
+- **Default Sentinel:** The unprogrammed flash state `0xFFFFFFFF`.
+- When `offset_mv == 0xFFFFFFFF`, the firmware uses the **default $500.0\,\text{mV}$** baseline (`0x01F40000` = $32\,768\,000$).
 
 ### 4.2. Sensitivity (Gain) & UQ16.16 Representation
 `gain_sens` specifies the sensor transfer curve slope in **UQ16.16 unsigned fixed-point format** ($V_{\text{actual}} = \text{gain\_sens} / 65536\,\text{mV}/^\circ\text{C}$):
@@ -141,11 +146,11 @@ Because valid sensor output voltages can legitimately be $0\,\text{mV}$ (e.g. fo
   - `0x00140000` = $20.0 \times 65536 = 1310720$ $\rightarrow 20.0\,\text{mV}/^\circ\text{C}$
 
 ### 4.3. Generalized Calculation Formula
-The conversion eliminates intermediate quantization by using an exact rational representation with reduced fraction $220 / 273$ ($\text{GCD}(3300, 4095) = 15$):
+The conversion eliminates intermediate quantization by using an exact rational representation with reduced fraction $220 / 273$ ($\text{GCD}(3300, 4095) = 15$) and unified Q16.16 scaling:
 
-$$\Delta = \text{ADC}_{\text{raw}} \times 220 - \text{offset\_mv} \times 273$$
+$$\Delta_{\text{Q16.16}} = \text{ADC}_{\text{raw}} \times (220 \times 65536) - \text{offset\_mv} \times 273$$
 
-$$\text{num} = \Delta \times (10 \times 65536) = \Delta \times 655360$$
+$$\text{num} = \Delta_{\text{Q16.16}} \times 10$$
 
 $$\text{den} = 273 \times \text{gain\_sens}$$
 
@@ -237,31 +242,26 @@ To prevent premature Flash memory wear (limited to ~100k write cycles), recorded
 #define CONFIG_MAGIC        (0xCFCFCF00U)
 #define CONFIG_BLOCK_ADDR   (0x00001800U)
 
-#define OFFSET_MV_DEFAULT   (500U)
+#define OFFSET_MV_DEFAULT   (0x01F40000U) // 500.0 mV in Q16.16
 #define GAIN_SENS_DEFAULT   (0x000A0000U) // 10.0 mV/deg C in UQ16.16
 
 /*
  * Unified User Configuration Block (Updated upon PID_SET_CONFIG or telemetry extreme write)
- * Total size: 24 bytes (exactly three 64-bit ECC chunks)
+ * Total size: 32 bytes (exactly four 64-bit ECC chunks)
  */
 typedef struct __attribute__((packed, aligned(8))) {
-    // 64-bit Chunk 1 (8 bytes)
-    uint32_t magic;              // 0xCFCFCF00
+    uint32_t magic;              // 0xCFCFCF00 (CONFIG_MAGIC)
     uint32_t logical_node_id;    // 32-bit system position ID
-
-    // 64-bit Chunk 2 (8 bytes)
-    uint16_t offset_mv;          // Offset in mV at 0 deg C (default 500 mV)
+    int32_t  offset_mv;          // Offset in mV at 0 deg C in Q16.16 (default 0x01F40000 = 500.0 mV)
     uint32_t gain_sens;          // Sensitivity in UQ16.16 (0x000A0000 = 10.0 mV/deg C)
     uint8_t  pid_get_temp;       // Configured PID for temperature
     uint8_t  pid_get_config;     // Configured PID for read config
-
-    // 64-bit Chunk 3 (8 bytes)
     uint8_t  pid_set_config;     // Configured PID for write config
     uint8_t  filter_hw_adc;      // ADC HW Averaging & Sample Time
     uint8_t  filter_sw_mode;     // SW Digital Filter mode
     int16_t  min_temp;           // Lowest recorded temperature (0.1 deg C)
     int16_t  max_temp;           // Highest recorded temperature (0.1 deg C)
-    uint8_t  _padding[1];        // Pad to 24 bytes (multiple of 8 for Flash ECC)
+    uint8_t  _padding[7];        // Pad to 32 bytes (multiple of 8 for Flash ECC)
 } ConfigBlock_t;
 ```
 ```
@@ -273,8 +273,8 @@ typedef struct __attribute__((packed, aligned(8))) {
 If the Configuration Block signature is invalid (`magic != FLASH_CONFIG_MAGIC`), RAM variables load standard defaults:
 
 - `logical_node_id`: `0x00000001`
-- `offset_mv`: `OFFSET_MV_DEFAULT` ($500\,\text{mV}$)
-- `gain_sens`: `GAIN_SENS_DEFAULT` ($10.0\,\text{mV}/^\circ\text{C}$)
+- `offset_mv`: `OFFSET_MV_DEFAULT` ($500.0\,\text{mV}$ in Q16.16: `0x01F40000`)
+- `gain_sens`: `GAIN_SENS_DEFAULT` ($10.0\,\text{mV}/^\circ\text{C}$ in UQ16.16: `0x000A0000`)
 - `pid_get_temp`: `0x0A` (Default `LIN_SEND_TEMP_PID`)
 - `pid_get_config`: `0x0B`
 - `pid_set_config`: `0x0C`

@@ -9,13 +9,14 @@
 /**
  * Import the modules used in this configuration.
  */
-const GPIO     = scripting.addModule("/ti/driverlib/GPIO", {}, false);
-const GPIO1    = GPIO.addInstance();
-const SYSCTL   = scripting.addModule("/ti/driverlib/SYSCTL");
-const TIMER    = scripting.addModule("/ti/driverlib/TIMER", {}, false);
-const TIMER1   = TIMER.addInstance();
-const uartLIN  = scripting.addModule("/ti/driverlib/uartLIN", {}, false);
-const uartLIN1 = uartLIN.addInstance();
+const GPIO          = scripting.addModule("/ti/driverlib/GPIO", {}, false);
+const GPIO1         = GPIO.addInstance();
+const SYSCTL        = scripting.addModule("/ti/driverlib/SYSCTL");
+const TIMER         = scripting.addModule("/ti/driverlib/TIMER", {}, false);
+const TIMER1        = TIMER.addInstance();
+const uartLIN       = scripting.addModule("/ti/driverlib/uartLIN", {}, false);
+const uartLIN1      = uartLIN.addInstance();
+const ProjectConfig = scripting.addModule("/ti/project_config/ProjectConfig");
 
 /**
  * Write custom configuration values to the imported modules.
@@ -51,8 +52,9 @@ uartLIN1.rxPinConfig.hideOutputInversion  = scripting.forceWrite(false);
 uartLIN1.rxPinConfig.onlyInternalResistor = scripting.forceWrite(false);
 uartLIN1.rxPinConfig.passedPeripheralType = scripting.forceWrite("Digital");
 
-const ProjectConfig              = scripting.addModule("/ti/project_config/ProjectConfig", {}, false);
 ProjectConfig.migrationCondition = true;
+ProjectConfig.genLinker          = false;
+ProjectConfig.genStartup         = false;
 
 /**
  * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future

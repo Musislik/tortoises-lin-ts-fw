@@ -430,7 +430,6 @@ void LIN_INST_IRQHandler(void) {
             break;
         }
         default: {
-            uint32_t pendingFlags = DL_UART_Extend_getEnabledInterruptStatus(LIN_INST, DL_UART_INTERRUPT_LINC0_MATCH);
             // TODO: implement error status in config or something to report LIN master unrecognized IRQ!
             break;
         }

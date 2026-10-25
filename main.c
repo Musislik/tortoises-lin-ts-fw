@@ -144,6 +144,8 @@ static void LIN_resetRX(LinRxState_t newState) {
 static void initHardware(void) {
     SYSCFG_DL_init();
     
+    DL_WWDT_setCoreHaltBehavior(WDT_INST, DL_WWDT_CORE_HALT_STOP);
+
     delay_cycles(DELAY_SWD_CYCLES); // 10s delay for SWD
     delay_cycles(DELAY_STANDARD_CYCLES);
     // Init GPIO - LIN enable pin
@@ -260,6 +262,7 @@ int main(void) {
         // Sleep safely (wake up on any interrupt).
         // This puts the CPU into a low-power state, significantly reducing power consumption 
         // while idling between ADC conversions or LIN bus activity.
+        DL_WWDT_restart(WDT_INST);
         __WFI();
     }
 }

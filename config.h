@@ -6,15 +6,15 @@
 #include <stddef.h>
 
 #define CONFIG_BLOCK_ADDR   0x1C00
-#define CONFIG_MAGIC        0xCFCFCF00
+#define CONFIG_MAGIC        0xCFCFCF01
 
 #define OFFSET_MV_DEFAULT   0x01F40000  // Default offset for TMP235 (500.0 mV in Q16.16)
 #define GAIN_SENS_DEFAULT   0x000A0000U // Default gain for TMP235 (10.0 mV/degC in UQ16.16)
 
 // PIDs baseline
-#define PID_GET_TEMP_DEFAULT   0x20
-#define PID_GET_CONFIG_DEFAULT 0x21
-#define PID_SET_CONFIG_DEFAULT 0x22
+#define PID_GET_TEMP_DEFAULT   0x1D     // dec30
+#define PID_GET_CONFIG_DEFAULT 0x1E
+#define PID_SET_CONFIG_DEFAULT 0x1F
 
 /**
  * @brief User configuration block structure with merged operational extremes.

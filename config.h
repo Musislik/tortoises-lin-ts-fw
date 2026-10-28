@@ -17,6 +17,16 @@
 #define PID_SET_CONFIG_DEFAULT 0x1F
 
 /**
+ * @brief Default sentinel for minimum recorded temperature (+3276.7 deg C).
+ */
+#define MIN_TEMP_DEFAULT        ((int16_t)0x7FFF)
+
+/**
+ * @brief Default sentinel for maximum recorded temperature (-3276.8 deg C).
+ */
+#define MAX_TEMP_DEFAULT        ((int16_t)0x8000)
+
+/**
  * @brief User configuration block structure with merged operational extremes.
  */
 typedef struct __attribute__((packed, aligned(8))) {
@@ -52,10 +62,10 @@ void configInit(void);
 /**
  * @brief Saves the unified configuration block to flash.
  *
- * @param newConfig Pointer to the configuration data to write.
+ * @param pNewConfig Pointer to the configuration data to write.
  * @return true if successful, false otherwise.
  */
-bool configSave(const ConfigBlock_t *newConfig);
+bool configSave(const ConfigBlock_t *pNewConfig);
 
 #define configSaveUser configSave
 

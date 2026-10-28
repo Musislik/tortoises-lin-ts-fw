@@ -8,12 +8,10 @@
 #define LOGICAL_NODE_ID_DEFAULT 1
 #define FILTER_HW_ADC_DEFAULT   0
 #define FILTER_SW_MODE_DEFAULT  0
-#define MIN_TEMP_DEFAULT        0x7FFF
-#define MAX_TEMP_DEFAULT        ((int16_t)0x8000)
-#define FLASH_BLOCK_SIZE_BYTES  8
-#define FLASH_WORDS_PER_BLOCK   2
+#define FLASH_WORDS_TOTAL       (sizeof(ConfigBlock_t) / sizeof(uint32_t))
 
 ConfigBlock_t gActiveConfig = {0};
+static ConfigBlock_t stagedConfig = {0};
 
 static uint32_t configCalculateCrc(const ConfigBlock_t *block) {
     if (block == NULL) {
@@ -60,37 +58,59 @@ void configInit(void) {
 
         // Persist default configuration to flash on first boot so that subsequent
         // boots find a valid magic signature and the sector is permanently provisioned.
-        configSave(&gActiveConfig);
+        if (!configSave(&gActiveConfig)) {
+            // Flash persistence failed on first boot; device remains on defaults in RAM
+        }
     }
 }
 
-bool configSave(const ConfigBlock_t *newConfig) {
-    DL_FlashCTL_executeClearStatus(FLASHCTL);
-    DL_FlashCTL_unprotectSector(FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
-
-    DL_FLASHCTL_COMMAND_STATUS status = DL_FlashCTL_eraseMemoryFromRAM(FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);
-    if (status != DL_FLASHCTL_COMMAND_STATUS_PASSED) {
+bool configSave(const ConfigBlock_t *pNewConfig) {
+    if (pNewConfig == NULL) {
         return false;
     }
 
-    // Copy to active config to apply immediately (guarding against self-memcpy).
-    // We update the active RAM struct before programming flash so that the system immediately 
-    // uses the new parameters (e.g. LIN PIDs) even while the slower flash write operation is ongoing.
-    if (newConfig != &gActiveConfig) {
-        memcpy(&gActiveConfig, newConfig, sizeof(ConfigBlock_t));
-    }
-    gActiveConfig.magic = CONFIG_MAGIC; // Ensure magic is right
-    memset(gActiveConfig._padding, 0xFF, sizeof(gActiveConfig._padding));
-    gActiveConfig.crc = configCalculateCrc(&gActiveConfig);
+    // Prepare staged configuration block with valid magic, padding, and CRC-32
+    stagedConfig = *pNewConfig;
+    stagedConfig.magic = CONFIG_MAGIC;
+    memset(stagedConfig._padding, 0xFF, sizeof(stagedConfig._padding));
+    stagedConfig.crc = configCalculateCrc(&stagedConfig);
 
-    // Program 64-bit blocks
-    uint32_t *dataPtr = (uint32_t *)&gActiveConfig;
-    for (int i = 0; i < sizeof(ConfigBlock_t) / FLASH_BLOCK_SIZE_BYTES; i++) {
-        status = DL_FlashCTL_programMemoryFromRAM64WithECCGenerated(FLASHCTL, CONFIG_BLOCK_ADDR + (i * FLASH_BLOCK_SIZE_BYTES), &dataPtr[i * FLASH_WORDS_PER_BLOCK]);
-        if (status != DL_FLASHCTL_COMMAND_STATUS_PASSED) {
-            return false;
-        }
-    }
+    // Save interrupt mask and disable interrupts to prevent bus stalls or HardFaults
+    // on single-bank flash while erase and program operations are active.
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+
     DL_FlashCTL_executeClearStatus(FLASHCTL);
-    return true;
+    DL_FlashCTL_unprotectSector(FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_REGION_SELECT_MAIN);
+
+    DL_FLASHCTL_COMMAND_STATUS status = DL_FlashCTL_eraseMemoryFromRAM(
+        FLASHCTL, CONFIG_BLOCK_ADDR, DL_FLASHCTL_COMMAND_SIZE_SECTOR);
+    if (status != DL_FLASHCTL_COMMAND_STATUS_PASSED) {
+        DL_FlashCTL_executeClearStatus(FLASHCTL);
+        __set_PRIMASK(primask);
+        return false;
+    }
+
+    // Program 32 bytes (8 words / 4 64-bit blocks) using DriverLib blocking API.
+    // This API automatically clears status and unprotects the sector before every 64-bit block.
+    status = DL_FlashCTL_programMemoryBlockingFromRAM64WithECCGenerated(
+        FLASHCTL,
+        CONFIG_BLOCK_ADDR,
+        (uint32_t *)&stagedConfig,
+        FLASH_WORDS_TOTAL,
+        DL_FLASHCTL_REGION_SELECT_MAIN);
+
+    DL_FlashCTL_executeClearStatus(FLASHCTL);
+
+    bool isSuccess = (status == DL_FLASHCTL_COMMAND_STATUS_PASSED);
+    if (isSuccess) {
+        // Commit to active RAM structure while interrupts are still masked to prevent
+        // torn reads in ISR.
+        memcpy(&gActiveConfig, &stagedConfig, sizeof(ConfigBlock_t));
+    }
+
+    // Restore prior interrupt state safely (prevents premature unmasking during boot)
+    __set_PRIMASK(primask);
+
+    return isSuccess;
 }

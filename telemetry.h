@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-extern int16_t gCurrentMinTemp;
-extern int16_t gCurrentMaxTemp;
+extern volatile int16_t gCurrentMinTemp;
+extern volatile int16_t gCurrentMaxTemp;
 
 /**
  * @brief Initialize the telemetry module and load previous extremes.

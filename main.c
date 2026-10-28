@@ -83,7 +83,7 @@ static volatile uint32_t gRawAdc = 0;
 
 // Pending config save from ISR
 volatile bool gPendingConfigSave = false;
-ConfigBlock_t gPendingConfig;
+volatile ConfigBlock_t gPendingConfig;
 
 // Latest measured temperature available to LIN ISR
 volatile int16_t gTemp = INT16_MAX;
@@ -211,7 +211,8 @@ int main(void) {
             // Flash writes are deferred to the main loop because executing them inside the ISR 
             // would block the CPU for too long, potentially causing LIN RX overruns or missing ADC events.
             __disable_irq();
-            ConfigBlock_t newCfg = gPendingConfig;
+            ConfigBlock_t newCfg;
+            memcpy(&newCfg, (const void *)&gPendingConfig, sizeof(ConfigBlock_t));
             gPendingConfigSave = false;
             __enable_irq();
 

@@ -6,8 +6,8 @@
 #define EXTREME_SIGNIFICANT_DELTA_X10 50 // 5.0 deg C
 #define SETTLING_TIME_SEC 3600 // 1 hour
 
-int16_t gCurrentMinTemp = 0;
-int16_t gCurrentMaxTemp = 0;
+volatile int16_t gCurrentMinTemp = 0;
+volatile int16_t gCurrentMaxTemp = 0;
 
 static int16_t gLastCommittedMinTemp = 0;
 static int16_t gLastCommittedMaxTemp = 0;
@@ -48,12 +48,12 @@ void telemetryNotifyConfigSaved(void) {
 void telemetryUpdate(int16_t newTemp) {
     bool recordBroken = false;
 
-    if (newTemp < gCurrentMinTemp) {
+    if ((gCurrentMinTemp == (int16_t)MIN_TEMP_DEFAULT) || (newTemp < gCurrentMinTemp)) {
         gCurrentMinTemp = newTemp;
         recordBroken = true;
     }
     
-    if (newTemp > gCurrentMaxTemp) {
+    if ((gCurrentMaxTemp == (int16_t)MAX_TEMP_DEFAULT) || (newTemp > gCurrentMaxTemp)) {
         gCurrentMaxTemp = newTemp;
         recordBroken = true;
     }
@@ -61,6 +61,15 @@ void telemetryUpdate(int16_t newTemp) {
     if (recordBroken) {
         settlingTimer = 0; // Reset settling timer
         needsCommit = true;
+
+        // If this is the initial temperature reading after boot, seed the committed baseline
+        // so that the initial reading does not trigger a false immediate commit.
+        if (gLastCommittedMinTemp == (int16_t)MIN_TEMP_DEFAULT) {
+            gLastCommittedMinTemp = gCurrentMinTemp;
+        }
+        if (gLastCommittedMaxTemp == (int16_t)MAX_TEMP_DEFAULT) {
+            gLastCommittedMaxTemp = gCurrentMaxTemp;
+        }
 
         // Check if delta is significant enough to commit immediately.
         // We bypass the settling timer for large temperature jumps to guarantee that severe thermal 
@@ -70,7 +79,9 @@ void telemetryUpdate(int16_t newTemp) {
         
         if (minDelta >= EXTREME_SIGNIFICANT_DELTA_X10 || maxDelta >= EXTREME_SIGNIFICANT_DELTA_X10) {
             // Immediate commit
-            commitExtremes();
+            if (!commitExtremes()) {
+                // Flash commit failed or busy; extreme remains queued for settlingTimer retry
+            }
         }
     }
 }

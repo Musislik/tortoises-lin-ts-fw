@@ -34,3 +34,17 @@ Implement a temporary **Safe Configuration Window** upon device power-up:
 ## 3. Flash Emulated EEPROM / Wear Leveling for Telemetry
 
 - Implementation of rolling 64-bit slot records inside Sector 7 to achieve $128\times$ higher endurance for telemetry/extremes storage without needing whole-sector erases on every record update.
+
+---
+
+## 4. Firmware Version Reporting
+
+### Problem Description
+Currently, the device reports sensor configuration and the factory hardware Trace ID (via `PID_GET_CONFIG`), but does not expose the installed firmware version over the LIN bus. This complicates fleet diagnostics, automated testing, and verification of flashed firmware revisions in the field.
+
+### Proposed Solution
+Provide a mechanism for the LIN Master to query the active firmware revision:
+- **Option A (Extend `PID_GET_CONFIG`):** Include firmware version fields (e.g., Major, Minor, Patch as 3 bytes or a 32-bit semantic version identifier) within the `PID_GET_CONFIG` response payload.
+- **Option B (Dedicated PID `PID_GET_FW_VERSION`):** Define a separate PID specifically returning firmware revision, build counter, and Git hash / build timestamp.
+- **Option C (LIN 2.x Diagnostic Identifier):** Expose the firmware revision through standard LIN diagnostic Read by Identifier requests (`0x3C` / `0x3D`).
+
